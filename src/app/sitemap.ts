@@ -27,6 +27,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
+      url: 'https://aura-app-ten-weld.vercel.app/pricing',
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: 'https://aura-app-ten-weld.vercel.app/blog',
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    },
+    {
+      url: 'https://aura-app-ten-weld.vercel.app/contact',
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
       url: 'https://aura-app-ten-weld.vercel.app/faq',
       lastModified: new Date(),
       changeFrequency: 'monthly',
@@ -34,4 +52,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ]
 }
+
 
