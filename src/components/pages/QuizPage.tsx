@@ -19,12 +19,15 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
   const q = questions[current];
 
   const goNext = useCallback(() => {
-    const finalAnswers = answers[q.id] ? answers : { ...answers, [q.id]: q.options[0].value };
+    // 必须选择才能继续
+    if (!answers[q.id]) {
+      return; // 不做任何操作，按钮禁用
+    }
     if (current < questions.length - 1) {
       setCurrent(c => c + 1);
       setAnimKey(k => k + 1);
     } else {
-      onComplete(finalAnswers);
+      onComplete(answers);
     }
   }, [answers, q, current, questions.length, onComplete]);
 
@@ -147,11 +150,14 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
           <div className="mt-8">
             <button
               onClick={goNext}
-              className="w-full bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] border-none rounded-2xl
-                py-4 text-white text-[15px] font-semibold cursor-pointer
+              disabled={!answers[q.id]}
+              className={`w-full border-none rounded-2xl
+                py-4 text-white text-[15px] font-semibold
                 transition-all duration-200 flex items-center justify-center gap-2
-                hover:-translate-y-1 hover:shadow-[0_10px_40px_rgba(139,92,246,0.45)]
-                active:scale-[0.99]"
+                ${answers[q.id]
+                  ? 'bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] cursor-pointer hover:-translate-y-1 hover:shadow-[0_10px_40px_rgba(139,92,246,0.45)] active:scale-[0.99]'
+                  : 'bg-[#6b6b8a] cursor-not-allowed opacity-50'
+                }`}
             >
               {current === questions.length - 1 ? t.generate : `${t.next} →`}
             </button>
