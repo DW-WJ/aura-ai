@@ -32,7 +32,7 @@ export default function Navigation() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#8b5cf6] to-[#6366f1] flex items-center justify-center text-white font-bold text-lg">
             A
           </div>
-          <span className="font-bold text-lg hidden sm:inline">AURA</span>
+          <span className="font-bold text-lg hidden sm:inline text-white">AURA</span>
         </Link>
 
         {/* Desktop Menu */}
@@ -65,7 +65,7 @@ export default function Navigation() {
         {/* Mobile Menu Button */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="md:hidden p-2 hover:bg-white/[0.05] rounded-lg transition-all"
+          className="md:hidden p-2 hover:bg-white/[0.05] rounded-lg transition-all text-white"
         >
           <svg
             className="w-6 h-6"
@@ -113,3 +113,4 @@ export default function Navigation() {
     </nav>
   );
 }
+
