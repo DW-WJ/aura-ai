@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import Link from "next/link";
+import Navigation from "@/components/ui/Navigation";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -49,42 +49,6 @@ export const metadata: Metadata = {
   },
 };
 
-function NavBar() {
-  const links = [
-    { href: "/", label: "工具" },
-    { href: "/features", label: "功能" },
-    { href: "/use-cases", label: "场景" },
-    { href: "/about", label: "关于" },
-    { href: "/pricing", label: "价格" },
-    { href: "/blog", label: "博客" },
-    { href: "/faq", label: "FAQ" },
-    { href: "/contact", label: "联系" },
-  ];
-
-  return (
-    <nav className="top-nav">
-      <div className="nav-inner">
-        <Link href="/" className="nav-logo">
-          <div className="nav-logo-icon">A</div>
-          <span>AURA</span>
-        </Link>
-        
-        <div className="nav-links">
-          {links.map((link) => (
-            <Link key={link.href} href={link.href} className="nav-link">
-              {link.label}
-            </Link>
-          ))}
-        </div>
-
-        <Link href="/" className="nav-cta">
-          开始测评
-        </Link>
-      </div>
-    </nav>
-  );
-}
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -115,8 +79,8 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <NavBar />
-        <div style={{ paddingTop: 64 }}>
+        <Navigation />
+        <div style={{ paddingTop: 56 }}>
           {children}
         </div>
         <Analytics />
