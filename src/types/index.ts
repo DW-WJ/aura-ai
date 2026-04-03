@@ -44,4 +44,4 @@ export type Lang = 'zh' | 'en';
 export type PageState = 'welcome' | 'quiz' | 'loading' | 'result';
 
 // 结果标签
-export type ResultTab = 'overview' | 'detail' | 'config';
+export type ResultTab = 'overview' | 'detail' | 'config' | 'aiEnhance';

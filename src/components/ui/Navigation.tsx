@@ -9,7 +9,7 @@ export default function Navigation() {
   const pathname = usePathname();
 
   const links = [
-    { href: '/', label: '工具' },
+    { href: '/', label: '首页' },
     { href: '/features', label: '功能' },
     { href: '/use-cases', label: '场景' },
     { href: '/about', label: '关于' },

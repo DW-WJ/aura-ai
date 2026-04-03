@@ -14,16 +14,17 @@ export default function Home() {
   const [lang, setLang] = useState<Lang>('zh');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ReturnType<typeof buildResult> | null>(null);
-  const [quizData, setQuizData] = useState<Record<string, string>>({});
 
   const handleStart = () => {
     setPage('quiz');
   };
 
+  // 答题完成 → 生成基础配置 → 展示；AI 增强由 ResultPage 内部流式完成
   const handleQuizComplete = (finalAnswers: Record<string, string>) => {
+    setAnswers(finalAnswers);
     setPage('loading');
+    const res = buildResult(finalAnswers, lang);
     setTimeout(() => {
-      const res = buildResult(finalAnswers, lang);
       setResult(res);
       setPage('result');
     }, 2600);
@@ -32,7 +33,6 @@ export default function Home() {
   const handleRestart = () => {
     setPage('welcome');
     setAnswers({});
-    setQuizData({});
     setResult(null);
   };
 
@@ -84,7 +84,12 @@ export default function Home() {
       )}
 
       {page === 'result' && result && (
-        <ResultPage result={result} lang={lang} onRestart={handleRestart} />
+        <ResultPage
+          result={result}
+          lang={lang}
+          answers={answers}
+          onRestart={handleRestart}
+        />
       )}
     </main>
   );
