@@ -1,0 +1,20 @@
+# render.yaml — Render 一键部署配置
+# 文档: https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: aura-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: LONGCAT_API_KEY
+        sync: false   # 手动填写，不同步到 Git
+      - key: PYTHON_API_URL
+        fromService:
+          type: web
+          name: aura-api
+          envVarKey: RENDER_EXTERNAL_URL
+        # 生产环境 RENDER_EXTERNAL_URL 即服务地址，前端可通过此地址调用
