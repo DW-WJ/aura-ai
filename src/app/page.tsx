@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Lang, PageState } from '@/types';
 import { buildResult } from '@/lib/buildResult';
-import Nav from '@/components/ui/Nav';
 import ParticleBackground from '@/components/ui/ParticleBackground';
 import WelcomePage from '@/components/pages/WelcomePage';
 import QuizPage from '@/components/pages/QuizPage';
@@ -41,14 +40,6 @@ export default function Home() {
     setPage('welcome');
   };
 
-  const stepText = page === 'quiz'
-    ? `${Object.keys(quizData).length + 1} / 16`
-    : page === 'loading'
-    ? (lang === 'zh' ? '生成中…' : 'Generating…')
-    : page === 'result'
-    ? (lang === 'zh' ? '你的专属 AI' : 'Your AI')
-    : (lang === 'zh' ? '专属 AI 配置器' : 'Personal AI Configurator');
-
   return (
     <main className="min-h-screen bg-[#080810] text-[#f0f0f8] relative">
       <style jsx global>{`
@@ -75,7 +66,6 @@ export default function Home() {
       `}</style>
 
       <ParticleBackground />
-      <Nav lang={lang} onToggle={() => setLang(l => l === 'zh' ? 'en' : 'zh')} step={stepText} />
 
       {page === 'welcome' && (
         <WelcomePage lang={lang} onStart={handleStart} />
