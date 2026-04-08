@@ -137,6 +137,7 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
                   questions.forEach(qu => {
                     filled[qu.id] = qu.options[Math.floor(Math.random() * qu.options.length)].value;
                   });
+                  analytics.quizCompleted(lang, 0);
                   onComplete(filled);
                 }}
                 className="bg-[rgba(139,92,246,0.1)] border border-[rgba(139,92,246,0.3)] rounded-xl px-4 py-2

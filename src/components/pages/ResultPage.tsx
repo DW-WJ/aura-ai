@@ -111,7 +111,8 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
   const [modelName, setModelName] = useState('');
   const [enhancedMeta, setEnhancedMeta] = useState<EnhancedMeta | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
-  const confettiFired = useRef(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const confettiTriggered = useRef(false);
   const streamRef = useRef<HTMLDivElement>(null);
 
   // Auto-switch to detail tab when AI enhance finishes
@@ -120,6 +121,15 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
       setTab('detail');
     }
   }, [streamPhase, tab]);
+
+  // Trigger confetti once when result page mounts
+  useEffect(() => {
+    if (confettiTriggered.current) return;
+    confettiTriggered.current = true;
+    // Small delay so it plays after page is visible
+    const t = setTimeout(() => setShowConfetti(true), 100);
+    return () => clearTimeout(t);
+  }, []);
 
   // Build display data: prefer AI-enhanced, fallback to base
   const display: DisplayData = {
@@ -134,12 +144,6 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
   };
 
   const hasEnhanced = streamPhase === 'done' || streamPhase === 'error';
-
-  // Confetti
-  useEffect(() => {
-    if (confettiFired.current) return;
-    confettiFired.current = true;
-  }, []);
 
   // AI Stream effect
   useEffect(() => {
@@ -259,7 +263,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
     <div className="min-h-screen px-4 md:px-6 py-20 pb-16 flex flex-col items-center gap-5">
 
       {/* Confetti */}
-      <Confetti active={confettiFired.current} />
+      <Confetti active={showConfetti} />
 
       {/* AI Enhancement Toggle */}
       {streamPhase === 'idle' && (
@@ -320,7 +324,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
             </div>
             <StatsBars stats={result.stats} lang={lang} />
           </div>
-          <div className="bg-[#0e0e1a] border border-white/[0.06] rounded-2xl p-6 flex flex-col items-center">
+          <div className="bg-[#0e0e1a] border border-white/[0.06] rounded-2xl p-6 flex flex-col items-center min-h-[260px] justify-center">
             <div className="text-[10px] tracking-[0.2em] text-[#6b6b8a] uppercase mb-2 w-full
               flex items-center gap-3 after:flex-1 after:h-px after:bg-white/[0.06]">
               {t.radar}

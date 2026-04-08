@@ -9,31 +9,31 @@ interface Particle {
   y: number;
   vx: number;
   vy: number;
-  rotation: number;
-  rotationSpeed: number;
   size: number;
   color: string;
   shape: 'circle' | 'rect';
   opacity: number;
+  rotation: number;
+  rotationSpeed: number;
 }
 
-export default function Confetti({ active }: { active: boolean }) {
+interface Props {
+  active: boolean;
+}
+
+export default function Confetti({ active }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const particlesRef = useRef<Particle[]>([]);
   const startRef = useRef<number>(0);
-  const activeRef = useRef(false);
+  const triggeredRef = useRef(false);
 
   useEffect(() => {
-    activeRef.current = active;
-  }, [active]);
-
-  useEffect(() => {
-    if (!active) return;
+    if (!active || triggeredRef.current) return;
+    triggeredRef.current = true;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -48,23 +48,26 @@ export default function Confetti({ active }: { active: boolean }) {
     const h = window.innerHeight;
 
     // Init particles
-    particlesRef.current = Array.from({ length: 60 }, () => ({
-      x: Math.random() * w,
-      y: -20 - Math.random() * 100,
-      vx: (Math.random() - 0.5) * 4,
-      vy: 2 + Math.random() * 4,
-      rotation: Math.random() * 360,
-      rotationSpeed: (Math.random() - 0.5) * 8,
-      size: 6 + Math.random() * 8,
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-      shape: Math.random() > 0.5 ? 'circle' : 'rect',
-      opacity: 1,
-    }));
+    particlesRef.current = Array.from({ length: 60 }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 6;
+      return {
+        x: Math.random() * w,
+        y: -20 - Math.random() * 100,
+        vx: Math.cos(angle) * speed * 0.5,
+        vy: Math.sin(angle) * speed * 0.3 + 2,
+        size: 5 + Math.random() * 7,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        shape: Math.random() > 0.5 ? 'circle' : 'rect',
+        opacity: 1,
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 6,
+      };
+    });
 
     startRef.current = performance.now();
 
     const animate = (now: number) => {
-      if (!activeRef.current) return;
       const elapsed = now - startRef.current;
 
       ctx.clearRect(0, 0, w, h);
@@ -73,26 +76,26 @@ export default function Confetti({ active }: { active: boolean }) {
       for (const p of particlesRef.current) {
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.12; // gravity
+        p.vy += 0.06; // gentle gravity
+        p.vx *= 0.99; // slight air resistance
         p.rotation += p.rotationSpeed;
 
-        if (p.y > h + 20) continue;
-        if (elapsed > 2000) {
-          p.opacity = Math.max(0, 1 - (elapsed - 2000) / 600);
+        if (p.y > h + 30) continue;
+        if (elapsed > 2500) {
+          p.opacity = Math.max(0, 1 - (elapsed - 2500) / 700);
         }
-
         if (p.opacity <= 0) continue;
         alive = true;
 
         ctx.save();
+        ctx.globalAlpha = p.opacity;
         ctx.translate(p.x, p.y);
         ctx.rotate((p.rotation * Math.PI) / 180);
-        ctx.globalAlpha = p.opacity;
         ctx.fillStyle = p.color;
 
         if (p.shape === 'circle') {
           ctx.beginPath();
-          ctx.ellipse(0, 0, p.size / 2, p.size / 2, 0, 0, 2 * Math.PI);
+          ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
           ctx.fill();
         } else {
           ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
@@ -101,11 +104,11 @@ export default function Confetti({ active }: { active: boolean }) {
         ctx.restore();
       }
 
-      if (alive && elapsed < 3000) {
+      if (alive && elapsed < 3200) {
         rafRef.current = requestAnimationFrame(animate);
       } else {
         ctx.clearRect(0, 0, w, h);
-        activeRef.current = false;
+        triggeredRef.current = false;
       }
     };
 
@@ -119,6 +122,8 @@ export default function Confetti({ active }: { active: boolean }) {
       style={{
         position: 'fixed',
         inset: 0,
+        width: '100vw',
+        height: '100vh',
         pointerEvents: 'none',
         zIndex: 999,
       }}

@@ -1,55 +1,57 @@
 'use client';
 
-// Simple analytics wrapper — uses Vercel Analytics track when available
-// Falls back to console.log in dev
+// Analytics wrapper — safe to call anywhere, no-op if analytics unavailable
 
 type EventProps = Record<string, string | number | boolean>;
 
-function trackInternal(eventName: string, props?: EventProps) {
-  // Vercel Analytics auto-tracks page views
-  // For custom events, use window.va if available (Vercel Analytics v2)
-  const va = (window as Window & { va?: { track: (name: string, props?: EventProps) => void } }).va;
-  if (va) {
-    va.track(eventName, props);
-  } else if (process.env.NODE_ENV === 'development') {
-    console.log('[Analytics]', eventName, props);
+function track(eventName: string, props?: EventProps) {
+  try {
+    // Vercel Analytics v2: window.va?.('event', { name, ... })
+    const va = (window as Window & {
+      va?: (...args: unknown[]) => void
+    }).va;
+    if (typeof va === 'function') {
+      va('event', { name: eventName, ...props });
+    }
+  } catch {
+    // Silently ignore — analytics must never break the app
   }
 }
 
 export const analytics = {
   quizStarted(lang: string) {
-    trackInternal('quiz_started', { lang });
+    track('quiz_started', { lang });
   },
 
   quizCompleted(lang: string, durationMs: number) {
-    trackInternal('quiz_completed', { lang, duration_ms: durationMs });
+    track('quiz_completed', { lang, duration_ms: durationMs });
   },
 
   aiEnhanceStarted() {
-    trackInternal('ai_enhance_started');
+    track('ai_enhance_started');
   },
 
   aiEnhanceCompleted(model: string, success: boolean) {
-    trackInternal('ai_enhance_completed', { model, success });
+    track('ai_enhance_completed', { model, success });
   },
 
   aiEnhanceFailed(errorCode: string) {
-    trackInternal('ai_enhance_failed', { error_code: errorCode });
+    track('ai_enhance_failed', { error_code: errorCode });
   },
 
   configCopied() {
-    trackInternal('config_copied');
+    track('config_copied');
   },
 
   configDownloaded() {
-    trackInternal('config_downloaded');
+    track('config_downloaded');
   },
 
   quizRestarted() {
-    trackInternal('quiz_restarted');
+    track('quiz_restarted');
   },
 
   pageView(path: string) {
-    trackInternal('page_view', { path });
+    track('page_view', { path });
   },
 };
