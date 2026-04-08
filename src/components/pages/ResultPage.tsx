@@ -337,12 +337,12 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
       {/* ── Detail ── */}
       {tab === 'detail' && (
         <div className="w-full max-w-[720px] flex flex-col gap-4 animate-in fade-in duration-300">
-          {([
-            { id: 'ds1', title: t.core, content: display.desc },
-            { id: 'ds2', title: t.comm, items: display.commLines },
-            { id: 'ds3', title: t.work, items: display.workLines },
-            { id: 'ds4', title: t.grow, items: display.growLines },
-          ] as const).map(({ id, title, content, items }, delay) => (
+          {[
+            { id: 'ds1', title: t.core, content: display.desc, items: null },
+            { id: 'ds2', title: t.comm, content: null, items: display.commLines },
+            { id: 'ds3', title: t.work, content: null, items: display.workLines },
+            { id: 'ds4', title: t.grow, content: null, items: display.growLines },
+          ].map(({ id, title, content, items }, delay) => (
             <div key={id}
               className="bg-[#0e0e1a] border border-white/[0.06] rounded-2xl p-6 animate-in fade-in slide-in-from-bottom-4"
               style={{ animationDelay: `${delay * 100 + 100}ms` }}>
@@ -410,7 +410,7 @@ interface HeroCardProps {
   modelName: string;
   errorMsg: string;
   enhancedMeta: EnhancedMeta | null;
-  t: typeof T.zh;
+  t: typeof T.zh | typeof T.en;
 }
 
 function HeroCard({ display, isStreaming, streamPhase, modelName, errorMsg, enhancedMeta, t }: HeroCardProps) {
@@ -512,7 +512,7 @@ interface StreamingCardProps {
   streamRef: React.RefObject<HTMLDivElement | null>;
   streamText: string;
   modelName: string;
-  t: typeof T.zh;
+  t: typeof T.zh | typeof T.en;
 }
 
 function StreamingCard({ streamRef, streamText, modelName, t }: StreamingCardProps) {
@@ -548,7 +548,7 @@ interface ConfigPanelProps {
   title: string;
   config: string;
   name: string;
-  t: typeof T.zh;
+  t: typeof T.zh | typeof T.en;
   copyConfig: (text: string) => void;
   downloadMd: (text: string, name: string) => void;
   onRestart: () => void;
