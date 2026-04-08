@@ -105,26 +105,48 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" role="main">
+      {/* Accessibility: skip to content */}
+      <a
+        href="#quiz-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100]
+          focus:bg-[#8b5cf6] focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm"
+      >
+        跳到题目
+      </a>
+
       {/* Progress bar */}
-      <div className="fixed top-0 left-0 right-0 h-[2px] bg-white/[0.05] z-40">
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(progress)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="答题进度"
+        className="fixed top-0 left-0 right-0 h-[2px] bg-white/[0.05] z-40"
+      >
         <div
           className="h-full bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4] transition-all duration-400"
           style={{ width: `${progress}%` }}
         />
       </div>
 
+      {/* Live region for screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        第 {current + 1} 题，共 {questions.length} 题
+      </div>
+
       {/* Main content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-20">
+      <div id="quiz-content" className="flex-1 flex flex-col items-center justify-center px-4 py-20">
         <div className="w-full max-w-[620px]">
 
           {/* Header row */}
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={goPrev}
+              aria-label="返回上一题"
               className="bg-transparent border border-white/[0.08] rounded-xl px-4 py-2
                 text-[13px] text-[#6b6b8a] cursor-pointer transition-all duration-200
-                hover:border-[rgba(139,92,246,0.5)] hover:text-white"
+                hover:border-[rgba(139,92,246,0.5)] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#8b5cf6]"
             >
               ← {t.back}
             </button>
@@ -132,6 +154,7 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
             <div className="flex items-center gap-3">
               {/* Random fill */}
               <button
+                aria-label={lang === 'zh' ? '随机填充所有答案' : 'Fill all answers randomly'}
                 onClick={() => {
                   const filled: Record<string, string> = {};
                   questions.forEach(qu => {
@@ -183,6 +206,9 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
                 return (
                   <button
                     key={opt.value}
+                    role="radio"
+                    aria-checked={isSelected}
+                    aria-label={opt.label}
                     onClick={() => select(opt.value)}
                     className={`
                       w-full text-left bg-[#0e0e1a] border rounded-2xl px-5 py-4
@@ -220,6 +246,7 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
             <button
               onClick={goNext}
               disabled={!answers[q.id]}
+              aria-label={current === questions.length - 1 ? '生成 AI 配置' : '下一题'}
               className={`w-full border-none rounded-2xl
                 py-4 text-white text-[15px] font-semibold
                 transition-all duration-200 flex items-center justify-center gap-2

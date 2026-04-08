@@ -3,6 +3,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Navigation from "@/components/ui/Navigation";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import PWAProvider from "@/components/PWAProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -62,6 +63,8 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#080810" />
         <link rel="icon" href="/favicon.ico" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-192.svg" />
         <link rel="canonical" href="https://aura-app-ten-weld.vercel.app" />
         <script
           type="application/ld+json"
@@ -88,6 +91,7 @@ export default function RootLayout({
         </ErrorBoundary>
         <Analytics />
         <SpeedInsights />
+        <PWAProvider />
       </body>
     </html>
   );

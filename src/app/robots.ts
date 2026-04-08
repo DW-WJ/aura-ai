@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: '/api/',
     },
-    sitemap: 'https://aura-ai.vercel.app/sitemap.xml',
+    sitemap: 'https://aura-app-ten-weld.vercel.app/sitemap.xml',
   }
 }
