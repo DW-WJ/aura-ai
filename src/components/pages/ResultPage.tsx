@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { BuildResult, Lang, ResultTab } from '@/types';
 import RadarChart from './RadarChart';
 import StatsBars from './StatsBars';
+import Confetti from './Confetti';
 
-interface Props {
-  result: BuildResult;
-  lang: Lang;
-  answers: Record<string, string>;
-  onRestart: () => void;
-}
+// ─── Config toggle ───────────────────────────────────────────────────────────
+// Set AI_ENHANCE = false to disable AI enhancement by default
+const AI_ENHANCE_DEFAULT = true;
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type StreamPhase = 'idle' | 'streaming' | 'done' | 'error';
 
@@ -24,37 +24,103 @@ interface EnhancedMeta {
   growLines: string[];
 }
 
-// Hero 和概览用的展示数据：优先 AI 增强版，否则降级基础版
 interface DisplayData {
   name: string;
   typeName: string;
   desc: string;
   traits: string[];
   configText: string;
-  // 详情页结构化内容：优先增强版，否则基础版
   commLines: string[];
   workLines: string[];
   growLines: string[];
 }
 
+// ─── Translations ────────────────────────────────────────────────────────────
+
+const T = {
+  zh: {
+    yourAI: '你的专属 AI',
+    overview: '概览',
+    detail: '详细分析',
+    config: '配置文件',
+    aiEnhanced: 'AI 增强版',
+    dim: '人格维度',
+    radar: '能力雷达',
+    core: '核心性格',
+    comm: '沟通风格',
+    work: '工作模式',
+    grow: '成长建议',
+    cfg: '系统提示词',
+    copy: '复制配置',
+    dl: '下载 .md',
+    copied: '已复制',
+    restart: '重新配置',
+    baseConfig: '基础配置',
+    enhancedBadge: 'AI 增强版',
+    aiThinking: '✨ AI 深度优化中…',
+    aiDone: '✨ AI 增强完成',
+    aiFailed: 'AI 增强失败，使用基础配置',
+    toggle: 'AI 增强',
+    on: '开',
+    off: '关',
+  },
+  en: {
+    yourAI: 'Your Personal AI',
+    overview: 'Overview',
+    detail: 'Deep Analysis',
+    config: 'Config',
+    aiEnhanced: 'AI Enhanced',
+    dim: 'Dimensions',
+    radar: 'Radar',
+    core: 'Core Personality',
+    comm: 'Communication',
+    work: 'Work Mode',
+    grow: 'Growth',
+    cfg: 'System Prompt',
+    copy: 'Copy Config',
+    dl: 'Download .md',
+    copied: 'Copied',
+    restart: 'Start Over',
+    baseConfig: 'Base Config',
+    enhancedBadge: 'AI Enhanced',
+    aiThinking: '✨ AI Deep Enhancement in progress…',
+    aiDone: '✨ AI Enhancement Complete',
+    aiFailed: 'AI Enhancement Failed — using base config',
+    toggle: 'AI Enhancement',
+    on: 'ON',
+    off: 'OFF',
+  },
+} as const;
+
+// ─── Main component ─────────────────────────────────────────────────────────
+
+interface Props {
+  result: BuildResult;
+  lang: Lang;
+  answers: Record<string, string>;
+  onRestart: () => void;
+}
+
 export default function ResultPage({ result, lang, answers, onRestart }: Props) {
+  const t = T[lang];
   const [tab, setTab] = useState<ResultTab>('overview');
+  const [aiEnhanceEnabled, setAiEnhanceEnabled] = useState(AI_ENHANCE_DEFAULT);
   const [streamText, setStreamText] = useState('');
   const [streamPhase, setStreamPhase] = useState<StreamPhase>('idle');
   const [modelName, setModelName] = useState('');
   const [enhancedMeta, setEnhancedMeta] = useState<EnhancedMeta | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
-  const confettiDone = useRef(false);
+  const confettiFired = useRef(false);
   const streamRef = useRef<HTMLDivElement>(null);
 
-  // AI 增强完成后自动切到详情页，展示增强版内容
+  // Auto-switch to detail tab when AI enhance finishes
   useEffect(() => {
-    if (streamPhase === 'done') {
+    if (streamPhase === 'done' && tab === 'overview') {
       setTab('detail');
     }
-  }, [streamPhase]);
+  }, [streamPhase, tab]);
 
-  // 构建展示数据：AI 增强版全部替换，基础版兜底
+  // Build display data: prefer AI-enhanced, fallback to base
   const display: DisplayData = {
     name: enhancedMeta?.name ?? result.name,
     typeName: enhancedMeta?.typeName ?? result.typeName,
@@ -66,53 +132,17 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
     growLines: enhancedMeta?.growLines?.length ? enhancedMeta.growLines : result.growLines,
   };
 
-  const t = {
-    zh: {
-      yourAI: '你的专属 AI', overview: '概览', detail: '详细分析', config: '配置文件',
-      aiEnhanced: 'AI 增强版', dim: '人格维度', radar: '能力雷达', core: '核心性格',
-      comm: '沟通风格', work: '工作模式', grow: '成长建议', cfg: '系统提示词',
-      copy: '复制配置', dl: '下载 .md', copied: '已复制', restart: '重新配置',
-      baseConfig: '基础配置', enhancedBadge: 'AI 增强版',
-      aiThinking: '✨ AI 深度优化中，正在生成…',
-      aiDone: '✨ AI 增强完成',
-      aiFailed: 'AI 增强失败，已使用基础配置',
-    },
-    en: {
-      yourAI: 'Your Personal AI', overview: 'Overview', detail: 'Deep Analysis', config: 'Config',
-      aiEnhanced: 'AI Enhanced', dim: 'Dimensions', radar: 'Radar', core: 'Core Personality',
-      comm: 'Communication', work: 'Work Mode', grow: 'Growth', cfg: 'System Prompt',
-      copy: 'Copy Config', dl: 'Download .md', copied: 'Copied', restart: 'Start Over',
-      baseConfig: 'Base Config', enhancedBadge: 'AI Enhanced',
-      aiThinking: '✨ AI Deep Enhancement in progress…',
-      aiDone: '✨ AI Enhancement Complete',
-      aiFailed: 'AI Enhancement Failed — using base config',
-    },
-  }[lang];
+  const hasEnhanced = streamPhase === 'done' || streamPhase === 'error';
 
-  // ── Confetti ──────────────────────────────────────────────────────────────
+  // Confetti
   useEffect(() => {
-    if (confettiDone.current) return;
-    confettiDone.current = true;
-    const colors = ['#8b5cf6', '#6366f1', '#06b6d4', '#10b981', '#ec4899', '#f59e0b'];
-    for (let i = 0; i < 50; i++) {
-      const el = document.createElement('div');
-      el.style.cssText = `
-        position:fixed;left:${Math.random() * 100}vw;top:-20px;
-        width:${6 + Math.random() * 6}px;height:${6 + Math.random() * 6}px;
-        border-radius:${Math.random() > 0.5 ? '50%' : '2px'};
-        pointer-events:none;z-index:999;
-        background:${colors[Math.floor(Math.random() * colors.length)]};
-        animation:confettiFall ${1.2 + Math.random()}s ease-in ${Math.random() * 0.5}s forwards;
-        transform:rotate(${Math.random() * 360}deg);
-      `;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 2500);
-    }
+    if (confettiFired.current) return;
+    confettiFired.current = true;
   }, []);
 
-  // ── 流式 AI 增强 ──────────────────────────────────────────────────────────
+  // AI Stream effect
   useEffect(() => {
-    if (streamPhase !== 'idle') return;
+    if (!aiEnhanceEnabled || streamPhase !== 'idle') return;
     let cancelled = false;
 
     const start = async () => {
@@ -153,19 +183,15 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
               if (currentEvent === 'start') {
                 setModelName(raw);
               } else if (currentEvent === 'meta') {
-                // meta 事件：JSON {name, typeName, desc, traits}
                 try {
-                  const meta = JSON.parse(raw) as EnhancedMeta;
-                  setEnhancedMeta(meta);
-                } catch { /* ignore parse error */ }
+                  setEnhancedMeta(JSON.parse(raw) as EnhancedMeta);
+                } catch { /* ignore */ }
               } else if (currentEvent === 'delta') {
                 try {
                   const parsed = JSON.parse(raw);
-                  if (parsed.content) {
-                    setStreamText(prev => prev + parsed.content);
-                  }
+                  if (parsed.content) setStreamText(p => p + parsed.content);
                 } catch {
-                  setStreamText(prev => prev + raw);
+                  setStreamText(p => p + raw);
                 }
               } else if (currentEvent === 'error') {
                 throw new Error(raw);
@@ -187,18 +213,17 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
 
     start();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiEnhanceEnabled]);
 
-  // 流式内容自动滚动到最新位置
+  // Auto-scroll
   useEffect(() => {
     const el = streamRef.current;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
+    if (el) el.scrollTop = el.scrollHeight;
   }, [streamText]);
 
-  // ── 工具函数 ──────────────────────────────────────────────────────────────
+  // ── Utils ─────────────────────────────────────────────────────────────────
+
   const copyConfig = (text: string) => {
     navigator.clipboard.writeText(text);
   };
@@ -212,10 +237,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
     URL.revokeObjectURL(a.href);
   };
 
-  const hasEnhanced = streamPhase === 'done' || streamPhase === 'error';
-  const isStreaming = streamPhase === 'streaming';
-
-  // 标签页
+  // Tabs
   const tabs: { id: ResultTab; label: string; badge?: boolean }[] = [
     { id: 'overview', label: t.overview },
     { id: 'detail', label: t.detail },
@@ -223,47 +245,44 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
     ...(hasEnhanced ? [{ id: 'aiEnhance' as ResultTab, label: t.aiEnhanced, badge: true }] : []),
   ];
 
-  // ── 渲染 ──────────────────────────────────────────────────────────────────
+  const isStreaming = streamPhase === 'streaming';
+
   return (
     <div className="min-h-screen px-4 md:px-6 py-20 pb-16 flex flex-col items-center gap-5">
 
-      {/* Hero Card — 使用 AI 增强的名字/描述/性格标签 */}
-      <HeroCard
-        display={display}
-        isStreaming={isStreaming}
-        streamPhase={streamPhase}
-        modelName={modelName}
-        errorMsg={errorMsg}
-        enhancedMeta={enhancedMeta}
-        t={t}
-      />
+      {/* Confetti */}
+      <Confetti active={confettiFired.current} />
 
-      {/* 流式预览卡片 — 流式过程中直接展示在页面上 */}
-      {isStreaming && (
-        <div className="w-full max-w-[720px] bg-[#0e0e1a] border border-[rgba(139,92,246,0.25)] rounded-2xl p-5 md:p-7 animate-in fade-in">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-[10px] tracking-[0.2em] text-[#8b5cf6] uppercase flex items-center gap-3
-              after:flex-1 after:h-px after:bg-[rgba(139,92,246,0.15)]">
-              ✦ {t.aiEnhanced}
-            </div>
-            {modelName && (
-              <span className="text-[10px] text-[#a78bfa] bg-[rgba(139,92,246,0.15)] px-2.5 py-1 rounded-full animate-pulse">
-                {modelName}
-              </span>
-            )}
-          </div>
-          {/* 流式内容 */}
-          <div
-            ref={streamRef}
-            className="font-mono text-[0.72rem] md:text-[0.8rem] text-[#8888a0] leading-[1.85]
-              whitespace-pre-wrap bg-[#08080e] border border-white/[0.04] rounded-xl p-4 md:p-5
-              min-h-[120px] max-h-[320px] overflow-y-auto scroll-smooth"
+      {/* AI Enhancement Toggle */}
+      {streamPhase === 'idle' && (
+        <div className="w-full max-w-[720px] flex items-center justify-end">
+          <button
+            onClick={() => setAiEnhanceEnabled(v => !v)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] cursor-pointer
+              border transition-all duration-200
+              ${aiEnhanceEnabled
+                ? 'bg-[#10b981]/10 border-[#10b981]/30 text-[#10b981]'
+                : 'bg-transparent border-white/[0.08] text-[#6b6b8a]'
+              }`}
           >
-            {streamText}
-            <span className="inline-block w-2 h-3.5 bg-[#8b5cf6] ml-0.5 animate-pulse align-middle rounded-sm" />
-          </div>
+            <span className={`w-1.5 h-1.5 rounded-full transition-colors duration-200
+              ${aiEnhanceEnabled ? 'bg-[#10b981]' : 'bg-[#6b6b8a]'}`} />
+            {t.toggle}
+            <span className={`font-semibold ${aiEnhanceEnabled ? 'text-[#10b981]' : 'text-[#6b6b8a]'}`}>
+              {aiEnhanceEnabled ? t.on : t.off}
+            </span>
+          </button>
         </div>
+      )}
+
+      {/* Hero Card */}
+      <HeroCard display={display} isStreaming={isStreaming} streamPhase={streamPhase}
+        modelName={modelName} errorMsg={errorMsg} enhancedMeta={enhancedMeta} t={t} />
+
+      {/* Streaming Preview */}
+      {isStreaming && (
+        <StreamingCard streamRef={streamRef} streamText={streamText}
+          modelName={modelName} t={t} />
       )}
 
       {/* Tabs */}
@@ -306,22 +325,22 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
       {/* ── Detail ── */}
       {tab === 'detail' && (
         <div className="w-full max-w-[720px] flex flex-col gap-4 animate-in fade-in duration-300">
-          {[
-            { id: 'ds1', title: t.core, content: display.desc, delay: 0 },
-            { id: 'ds2', title: t.comm, items: display.commLines, delay: 100 },
-            { id: 'ds3', title: t.work, items: display.workLines, delay: 200 },
-            { id: 'ds4', title: t.grow, items: display.growLines, delay: 300 },
-          ].map((section) => (
-            <div key={section.id}
+          {([
+            { id: 'ds1', title: t.core, content: display.desc },
+            { id: 'ds2', title: t.comm, items: display.commLines },
+            { id: 'ds3', title: t.work, items: display.workLines },
+            { id: 'ds4', title: t.grow, items: display.growLines },
+          ] as const).map(({ id, title, content, items }, delay) => (
+            <div key={id}
               className="bg-[#0e0e1a] border border-white/[0.06] rounded-2xl p-6 animate-in fade-in slide-in-from-bottom-4"
-              style={{ animationDelay: `${section.delay + 100}ms` }}>
+              style={{ animationDelay: `${delay * 100 + 100}ms` }}>
               <div className="text-[10px] tracking-[0.2em] text-[#8b5cf6] uppercase mb-4 flex items-center gap-3
                 after:flex-1 after:h-px after:bg-[rgba(139,92,246,0.15)]">
-                {section.title}
+                {title}
               </div>
-              {section.items ? (
+              {items ? (
                 <ul className="flex flex-col gap-2.5">
-                  {section.items.map((item) => (
+                  {items.map((item) => (
                     <li key={item} className="flex items-start gap-3 text-[#9090b0] text-[0.88rem] leading-relaxed">
                       <span className="text-[#8b5cf6] mt-0.5 flex-shrink-0">→</span>
                       {item}
@@ -329,7 +348,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
                   ))}
                 </ul>
               ) : (
-                <p className="text-[#9090b0] text-[0.9rem] leading-[1.8]">{section.content}</p>
+                <p className="text-[#9090b0] text-[0.9rem] leading-[1.8]">{content}</p>
               )}
             </div>
           ))}
@@ -350,7 +369,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
         />
       )}
 
-      {/* ── AI Enhanced Config（流式实时打印）── */}
+      {/* ── AI Enhanced Config ── */}
       {tab === 'aiEnhance' && (
         <ConfigPanel
           title={t.enhancedBadge}
@@ -379,12 +398,12 @@ interface HeroCardProps {
   modelName: string;
   errorMsg: string;
   enhancedMeta: EnhancedMeta | null;
-  t: Record<string, string>;
+  t: typeof T.zh;
 }
 
 function HeroCard({ display, isStreaming, streamPhase, modelName, errorMsg, enhancedMeta, t }: HeroCardProps) {
   return (
-    <div className="w-full max-w-[720px] bg-gradient-to-b from-[#0e0e1a] to-[#0a0a12] 
+    <div className="w-full max-w-[720px] bg-gradient-to-b from-[#0e0e1a] to-[#0a0a12]
       border border-white/[0.08] rounded-3xl p-6 md:p-9 relative overflow-hidden
       animate-in fade-in slide-in-from-bottom-6 duration-500">
 
@@ -398,7 +417,7 @@ function HeroCard({ display, isStreaming, streamPhase, modelName, errorMsg, enha
           ✦ {t.yourAI}
         </div>
 
-        {/* Name — 实时显示 AI 生成的名字 */}
+        {/* Name */}
         <div className="text-[2.2rem] md:text-[3rem] font-bold tracking-[-0.04em] mb-2
           bg-gradient-to-r from-white via-[#e2e8f0] to-[#94a3b8] bg-clip-text text-transparent
           transition-all duration-500">
@@ -408,35 +427,33 @@ function HeroCard({ display, isStreaming, streamPhase, modelName, errorMsg, enha
           )}
         </div>
 
-        {/* Type — 实时显示 AI 生成的性格类型 */}
+        {/* Type */}
         {display.typeName && (
           <div className="text-[#8b5cf6] font-medium text-[0.95rem] mb-4 transition-all duration-300">
             {display.typeName}
           </div>
         )}
 
-        {/* Description — 实时显示 AI 生成的描述 */}
+        {/* Description */}
         <p className="text-[#8892a6] leading-[1.75] text-[0.92rem] mb-6 transition-all duration-300">
-          {display.desc || (isStreaming ? '✨ 正在生成 AI 专属描述…' : '')}
+          {display.desc || (isStreaming ? '✨ 正在生成专属描述…' : '')}
         </p>
 
-        {/* Traits — 实时显示 AI 生成的性格标签 */}
+        {/* Traits */}
         <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
-          {display.traits.length > 0 ? (
-            display.traits.map((trait, i) => (
-              <span key={trait + i}
-                className="bg-[#13131f] border border-white/[0.06] rounded-lg px-3 py-1.5
-                  text-[0.75rem] text-[#9898b0] animate-in fade-in"
-                style={{ animationDelay: `${i * 40}ms` }}>
-                {trait}
-              </span>
-            ))
-          ) : isStreaming ? (
+          {display.traits.length > 0 ? display.traits.map((trait, i) => (
+            <span key={trait + i}
+              className="bg-[#13131f] border border-white/[0.06] rounded-lg px-3 py-1.5
+                text-[0.75rem] text-[#9898b0] animate-in fade-in"
+              style={{ animationDelay: `${i * 40}ms` }}>
+              {trait}
+            </span>
+          )) : isStreaming ? (
             <span className="text-[#6b6b8a] text-[0.75rem] animate-pulse">分析性格特征中…</span>
           ) : null}
         </div>
 
-        {/* AI 状态行 */}
+        {/* Status */}
         <div className="flex items-center gap-3 flex-wrap">
           {isStreaming && (
             <div className="flex items-center gap-2 text-[#a78bfa] text-xs">
@@ -477,13 +494,49 @@ function HeroCard({ display, isStreaming, streamPhase, modelName, errorMsg, enha
   );
 }
 
+// ─── Streaming Card ──────────────────────────────────────────────────────────
+
+interface StreamingCardProps {
+  streamRef: React.RefObject<HTMLDivElement | null>;
+  streamText: string;
+  modelName: string;
+  t: typeof T.zh;
+}
+
+function StreamingCard({ streamRef, streamText, modelName, t }: StreamingCardProps) {
+  return (
+    <div className="w-full max-w-[720px] bg-[#0e0e1a] border border-[rgba(139,92,246,0.25)] rounded-2xl p-5 md:p-7 animate-in fade-in">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-[10px] tracking-[0.2em] text-[#8b5cf6] uppercase flex items-center gap-3
+          after:flex-1 after:h-px after:bg-[rgba(139,92,246,0.15)]">
+          ✦ {t.aiEnhanced}
+        </div>
+        {modelName && (
+          <span className="text-[10px] text-[#a78bfa] bg-[rgba(139,92,246,0.15)] px-2.5 py-1 rounded-full animate-pulse">
+            {modelName}
+          </span>
+        )}
+      </div>
+      <div
+        ref={streamRef}
+        className="font-mono text-[0.72rem] md:text-[0.8rem] text-[#8888a0] leading-[1.85]
+          whitespace-pre-wrap bg-[#08080e] border border-white/[0.04] rounded-xl p-4 md:p-5
+          min-h-[120px] max-h-[320px] overflow-y-auto scroll-smooth"
+      >
+        {streamText}
+        <span className="inline-block w-2 h-3.5 bg-[#8b5cf6] ml-0.5 animate-pulse align-middle rounded-sm" />
+      </div>
+    </div>
+  );
+}
+
 // ─── Config Panel ─────────────────────────────────────────────────────────────
 
 interface ConfigPanelProps {
   title: string;
   config: string;
   name: string;
-  t: Record<string, string>;
+  t: typeof T.zh;
   copyConfig: (text: string) => void;
   downloadMd: (text: string, name: string) => void;
   onRestart: () => void;
@@ -527,8 +580,8 @@ function ConfigPanel({
       {/* Content */}
       <div
         ref={streamRef}
-        className="font-mono text-[0.72rem] md:text-[0.8rem] text-[#8888a0] leading-[1.85] 
-          whitespace-pre-wrap bg-[#08080e] border border-white/[0.04] rounded-xl p-4 md:p-5 
+        className="font-mono text-[0.72rem] md:text-[0.8rem] text-[#8888a0] leading-[1.85]
+          whitespace-pre-wrap bg-[#08080e] border border-white/[0.04] rounded-xl p-4 md:p-5
           max-h-[450px] overflow-y-auto scroll-smooth"
       >
         {config || (isStreaming ? '' : '(无内容)')}
@@ -553,7 +606,7 @@ function ConfigPanel({
             flex items-center justify-center gap-2 hover:border-[rgba(139,92,246,0.5)] hover:text-white
             hover:bg-[rgba(139,92,246,0.05)] disabled:opacity-40 disabled:cursor-not-allowed"
           disabled={!config || isStreaming}>
-            ↓ {t.dl}
+          ↓ {t.dl}
         </button>
         <button onClick={onRestart}
           className="bg-transparent border border-white/[0.06] rounded-xl px-5 py-3

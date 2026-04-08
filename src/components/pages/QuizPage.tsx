@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Question, Lang } from '@/types';
+import { useState, useCallback, useEffect } from 'react';
+import { Lang } from '@/types';
 import { questions_zh, questions_en } from '@/data/questions';
+import { useQuizKeyboard } from '@/hooks/useQuizKeyboard';
 
 interface Props {
   lang: Lang;
@@ -10,46 +11,88 @@ interface Props {
   onBack: () => void;
 }
 
+const STORAGE_KEY = 'aura_quiz_answers';
+
 export default function QuizPage({ lang, onComplete, onBack }: Props) {
   const questions = lang === 'zh' ? questions_zh : questions_en;
   const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [animKey, setAnimKey] = useState(0);
+
+  // Restore from localStorage on mount
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Persist on every change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(answers));
+    } catch { /* ignore */ }
+  }, [answers]);
 
   const q = questions[current];
 
+  const currentIndex = q.options.findIndex(o => o.value === answers[q.id]);
+
+  const select = useCallback((value: string) => {
+    setAnswers(prev => ({ ...prev, [q.id]: value }));
+  }, [q.id]);
+
   const goNext = useCallback(() => {
-    // 必须选择才能继续
-    if (!answers[q.id]) {
-      return; // 不做任何操作，按钮禁用
-    }
+    if (!answers[q.id]) return;
     if (current < questions.length - 1) {
       setCurrent(c => c + 1);
       setAnimKey(k => k + 1);
     } else {
       onComplete(answers);
     }
-  }, [answers, q, current, questions.length, onComplete]);
+  }, [answers, q.id, current, questions.length, onComplete]);
 
-  const goPrev = () => {
+  const goPrev = useCallback(() => {
     if (current > 0) {
       setCurrent(c => c - 1);
       setAnimKey(k => k + 1);
+    } else {
+      onBack();
     }
-  };
+  }, [current, onBack]);
 
-  const select = (value: string) => {
-    setAnswers(prev => ({ ...prev, [q.id]: value }));
-  };
+  useQuizKeyboard({
+    optionCount: q.options.length,
+    selectedIndex: currentIndex,
+    onSelect: (index) => {
+      if (index >= 0 && index < q.options.length) {
+        select(q.options[index].value);
+      }
+    },
+    onConfirm: goNext,
+    onPrev: goPrev,
+  });
 
   const progress = ((current + 1) / questions.length) * 100;
 
   const t = lang === 'zh' ? {
-    question: '问题', back: '返回', next: '继续', generate: '生成 ✦',
-    random: '随机跳过', answered: '已答'
+    question: '问题',
+    back: '返回',
+    next: '继续',
+    generate: '生成 ✦',
+    random: '随机跳过',
+    answered: '已答',
+    keyboardHint: '使用 ↑↓ 选择，Enter 确认',
   } : {
-    question: 'Question', back: 'Back', next: 'Next', generate: 'Generate ✦',
-    random: 'Skip All', answered: ''
+    question: 'Question',
+    back: 'Back',
+    next: 'Next',
+    generate: 'Generate ✦',
+    random: 'Skip All',
+    answered: '',
+    keyboardHint: '↑↓ to select, Enter to confirm',
   };
 
   return (
@@ -62,28 +105,28 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
         />
       </div>
 
-      {/* Main content - full height, centered */}
+      {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-20">
         <div className="w-full max-w-[620px]">
 
           {/* Header row */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={current === 0 ? onBack : goPrev}
+              onClick={goPrev}
               className="bg-transparent border border-white/[0.08] rounded-xl px-4 py-2
-                text-[#6b6b8a] text-[13px] cursor-pointer transition-all duration-200
+                text-[13px] text-[#6b6b8a] cursor-pointer transition-all duration-200
                 hover:border-[rgba(139,92,246,0.5)] hover:text-white"
             >
               ← {t.back}
             </button>
 
             <div className="flex items-center gap-3">
-              {/* Random button */}
+              {/* Random fill */}
               <button
                 onClick={() => {
                   const filled: Record<string, string> = {};
-                  questions.forEach(q => {
-                    filled[q.id] = q.options[Math.floor(Math.random() * q.options.length)].value;
+                  questions.forEach(qu => {
+                    filled[qu.id] = qu.options[Math.floor(Math.random() * qu.options.length)].value;
                   });
                   onComplete(filled);
                 }}
@@ -117,32 +160,48 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
               {q.text}
             </div>
 
+            {/* keyboard hint */}
+            <div className="text-[10px] text-[#4a4a6a] mb-3 tracking-wide">
+              {t.keyboardHint}
+            </div>
+
             {/* options */}
             <div className="flex flex-col gap-2.5">
-              {q.options.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => select(opt.value)}
-                  className={`
-                    w-full text-left bg-[#0e0e1a] border rounded-2xl px-5 py-4
-                    cursor-pointer transition-all duration-200 flex items-center gap-4
-                    text-[0.9rem] md:text-[0.95rem] leading-relaxed
-                    ${answers[q.id] === opt.value
-                      ? 'border-[#8b5cf6] text-white bg-[#13131f] shadow-[0_0_24px_rgba(139,92,246,0.12)]'
-                      : 'border-white/[0.07] text-[#9090b0] hover:border-[rgba(139,92,246,0.5)] hover:text-white hover:-translate-y-0.5 hover:bg-[#0f0f1a]'
-                    }`}
-                >
-                  <span className={`
-                    w-[22px] h-[22px] rounded-full border-[1.5px] flex-shrink-0
-                    flex items-center justify-center transition-all duration-200
-                    ${answers[q.id] === opt.value ? 'border-[#8b5cf6] bg-[#8b5cf6]' : 'border-white/[0.12]'}`}>
-                    {answers[q.id] === opt.value && (
-                      <span className="w-[8px] h-[8px] rounded-full bg-white" />
+              {q.options.map((opt, i) => {
+                const isSelected = answers[q.id] === opt.value;
+                const isFocused = currentIndex === i;
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => select(opt.value)}
+                    className={`
+                      w-full text-left bg-[#0e0e1a] border rounded-2xl px-5 py-4
+                      cursor-pointer transition-all duration-200 flex items-center gap-4
+                      text-[0.9rem] md:text-[0.95rem] leading-relaxed
+                      ${isSelected
+                        ? 'border-[#8b5cf6] text-white bg-[#13131f] shadow-[0_0_24px_rgba(139,92,246,0.12)]'
+                        : isFocused
+                        ? 'border-[rgba(139,92,246,0.45)] text-[#c0c0d8] -translate-y-0.5 bg-[#0f0f1a]'
+                        : 'border-white/[0.07] text-[#9090b0] hover:border-[rgba(139,92,246,0.5)] hover:text-white hover:-translate-y-0.5 hover:bg-[#0f0f1a]'
+                      }`}
+                  >
+                    <span className={`
+                      w-[22px] h-[22px] rounded-full border-[1.5px] flex-shrink-0
+                      flex items-center justify-center transition-all duration-200
+                      ${isSelected ? 'border-[#8b5cf6] bg-[#8b5cf6]' : isFocused ? 'border-[#8b5cf6]/60' : 'border-white/[0.12]'}`}>
+                      {isSelected && (
+                        <span className="w-[8px] h-[8px] rounded-full bg-white" />
+                      )}
+                    </span>
+                    {opt.label}
+                    {isFocused && (
+                      <span className="ml-auto text-[#6b6b8a] text-[10px] border border-white/[0.08] px-1.5 py-0.5 rounded">
+                        ↵
+                      </span>
                     )}
-                  </span>
-                  {opt.label}
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
