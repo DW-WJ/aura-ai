@@ -46,3 +46,5 @@ aura-api/.env
 next-env.d.ts
 
 .vercel
+
+/src/generated/prisma

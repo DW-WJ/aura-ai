@@ -4,6 +4,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import Navigation from "@/components/ui/Navigation";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PWAProvider from "@/components/PWAProvider";
+import AuthProvider from "@/components/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -83,15 +84,17 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <ErrorBoundary>
-          <Navigation />
-          <div style={{ paddingTop: 56 }}>
-            {children}
-          </div>
-        </ErrorBoundary>
-        <Analytics />
-        <SpeedInsights />
-        <PWAProvider />
+        <AuthProvider>
+          <ErrorBoundary>
+            <Navigation />
+            <div style={{ paddingTop: 56 }}>
+              {children}
+            </div>
+          </ErrorBoundary>
+          <Analytics />
+          <SpeedInsights />
+          <PWAProvider />
+        </AuthProvider>
       </body>
     </html>
   );
