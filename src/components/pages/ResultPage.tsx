@@ -5,6 +5,7 @@ import { BuildResult, Lang, ResultTab } from '@/types';
 import RadarChart from './RadarChart';
 import StatsBars from './StatsBars';
 import Confetti from './Confetti';
+import { analytics } from '@/lib/analytics';
 
 // ─── Config toggle ───────────────────────────────────────────────────────────
 // Set AI_ENHANCE = false to disable AI enhancement by default
@@ -150,6 +151,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
       setModelName('');
       setStreamText('');
       setEnhancedMeta(null);
+      analytics.aiEnhanceStarted();
 
       try {
         const res = await fetch('/api/enhance', {
@@ -202,11 +204,15 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
           }
         }
 
-        if (!cancelled) setStreamPhase('done');
+        if (!cancelled) {
+          setStreamPhase('done');
+          analytics.aiEnhanceCompleted(modelName || 'unknown', true);
+        }
       } catch (e: unknown) {
         if (!cancelled) {
           setErrorMsg(e instanceof Error ? e.message : String(e));
           setStreamPhase('error');
+          analytics.aiEnhanceFailed(e instanceof Error ? e.message : 'unknown');
         }
       }
     };
@@ -226,6 +232,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
 
   const copyConfig = (text: string) => {
     navigator.clipboard.writeText(text);
+    analytics.configCopied();
   };
 
   const downloadMd = (text: string, name: string) => {
@@ -235,6 +242,7 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
     a.download = `${name}-config.md`;
     a.click();
     URL.revokeObjectURL(a.href);
+    analytics.configDownloaded();
   };
 
   // Tabs

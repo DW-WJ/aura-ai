@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Navigation from "@/components/ui/Navigation";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,7 +32,7 @@ export const metadata: Metadata = {
     description: "通过 16 个精准问题，为你生成专属的 AI 助手配置。深度人格分析、高质量系统提示词、多维能力评估。",
     images: [
       {
-        url: "https://aura-app-ten-weld.vercel.app/og-image.png",
+        url: "https://aura-app-ten-weld.vercel.app/opengraph-image",
         width: 1200,
         height: 630,
         alt: "AURA - AI 人格配置器",
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "AURA · 打造你的专属 AI 助手",
     description: "通过 16 个精准问题，为你生成专属的 AI 助手配置。",
-    images: ["https://aura-app-ten-weld.vercel.app/og-image.png"],
+    images: ["https://aura-app-ten-weld.vercel.app/opengraph-image"],
   },
   alternates: {
     canonical: "https://aura-app-ten-weld.vercel.app",
@@ -79,10 +80,12 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <Navigation />
-        <div style={{ paddingTop: 56 }}>
-          {children}
-        </div>
+        <ErrorBoundary>
+          <Navigation />
+          <div style={{ paddingTop: 56 }}>
+            {children}
+          </div>
+        </ErrorBoundary>
         <Analytics />
         <SpeedInsights />
       </body>

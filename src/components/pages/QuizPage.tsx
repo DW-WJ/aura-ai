@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Lang } from '@/types';
 import { questions_zh, questions_en } from '@/data/questions';
 import { useQuizKeyboard } from '@/hooks/useQuizKeyboard';
+import { analytics } from '@/lib/analytics';
 
 interface Props {
   lang: Lang;
@@ -17,6 +18,12 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
   const questions = lang === 'zh' ? questions_zh : questions_en;
   const [current, setCurrent] = useState(0);
   const [animKey, setAnimKey] = useState(0);
+  const startTime = useRef(Date.now());
+
+  // Track quiz start
+  useEffect(() => {
+    analytics.quizStarted(lang);
+  }, [lang]);
 
   // Restore from localStorage on mount
   const [answers, setAnswers] = useState<Record<string, string>>(() => {
@@ -50,9 +57,11 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
       setCurrent(c => c + 1);
       setAnimKey(k => k + 1);
     } else {
+      const duration = Date.now() - startTime.current;
+      analytics.quizCompleted(lang, duration);
       onComplete(answers);
     }
-  }, [answers, q.id, current, questions.length, onComplete]);
+  }, [answers, q.id, current, questions.length, onComplete, lang]);
 
   const goPrev = useCallback(() => {
     if (current > 0) {
