@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server';
 
+// 强制 Node.js Runtime（非 Edge），避免 SSE 缓冲问题
+export const runtime = 'nodejs';
+
 const PYTHON_API = process.env.PYTHON_API_URL ?? 'http://127.0.0.1:8000';
 
 export async function POST(req: NextRequest) {
@@ -34,7 +37,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Stream directly through
+    // Node.js Runtime 下透传 SSE 流（无缓冲）
     return new Response(pythonRes.body, {
       headers: {
         'Content-Type': 'text/event-stream; charset=utf-8',
