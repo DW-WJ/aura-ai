@@ -13,57 +13,66 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: '无效的请求体，请传入 JSON' }, { status: 400 });
   }
 
+  let pythonRes: Response;
   try {
-    const pythonRes = await fetch(`${PYTHON_API}/enhance-stream`, {
+    pythonRes = await fetch(`${PYTHON_API}/enhance-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-
-    if (!pythonRes.ok) {
-      let errDetail = '';
-      try {
-        const errJson = await pythonRes.json();
-        errDetail = errJson?.detail ?? errJson?.error ?? '';
-      } catch { /* ignore */ }
-
-      const msg = errDetail
-        ? `后端服务返回错误：${errDetail}`
-        : 'AI 增强服务暂时不可用（HTTP ' + pythonRes.status + '），请稍后重试';
-
-      return Response.json(
-        { error: msg, code: 'UPSTREAM_ERROR' },
-        { status: 502, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Node.js Runtime 下透传 SSE 流（无缓冲）
-    return new Response(pythonRes.body, {
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
-    });
-  } catch (err: unknown) {
-    const isConnectError =
-      err instanceof TypeError ||
-      (err instanceof Error && err.message.includes('fetch'));
-
-    const message = isConnectError
-      ? '无法连接到 AI 增强服务。请确保 aura-api 已启动（运行 python main.py），或检查 .env.local 中的 PYTHON_API_URL 配置。'
-      : (err instanceof Error ? err.message : String(err));
-
+  } catch (err) {
     return Response.json(
       {
-        error: message,
-        hint: isConnectError
-          ? '提示：启动后端服务后刷新页面重试'
-          : undefined,
-        code: isConnectError ? 'CONNECTION_ERROR' : 'UNKNOWN_ERROR',
+        error: '无法连接到 AI 增强服务。请确保 aura-api 已启动。',
+        code: 'CONNECTION_ERROR',
       },
-      { status: 503, headers: { 'Content-Type': 'application/json' } }
+      { status: 503 }
     );
   }
+
+  if (!pythonRes.ok) {
+    let errDetail = '';
+    try {
+      const errJson = await pythonRes.json();
+      errDetail = errJson?.detail ?? errJson?.error ?? '';
+    } catch { /* ignore */ }
+    const msg = errDetail
+      ? `后端服务返回错误：${errDetail}`
+      : `AI 增强服务暂时不可用（HTTP ${pythonRes.status}）`;
+    return Response.json({ error: msg, code: 'UPSTREAM_ERROR' }, { status: 502 });
+  }
+
+  // 手动逐 chunk 读取 SSE 并转发，确保无缓冲
+  const reader = pythonRes.body!.getReader();
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+      } catch {
+        // ignore
+      } finally {
+        controller.close();
+        reader.releaseLock();
+      }
+    },
+    cancel() {
+      reader.cancel();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Transfer-Encoding': 'chunked',
+    },
+  });
 }

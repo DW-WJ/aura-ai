@@ -22,7 +22,8 @@ export default function QuizPage({ lang, onComplete, onBack }: Props) {
 
   // Track quiz start
   useEffect(() => {
-    analytics.quizStarted(lang);
+    analytics.trackQuizStart();
+    analytics.startSession('/quiz', undefined);
   }, [lang]);
 
   // Restore from localStorage on mount

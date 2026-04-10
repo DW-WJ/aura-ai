@@ -35,12 +35,19 @@ MODEL_POOL = [
     ("LongCat-Flash-Lite", 4),
     ("LongCat-Flash-Chat", 3),
     ("LongCat-Flash-Thinking-2601", 1),
-    ("LongCat-Flash-Omni-2603", 1),
+    # 注：Omni-2603 因返回 400 json format error 已临时移除
 ]
 
-def pick_model() -> str:
-    names = [m for m, _ in MODEL_POOL]
-    weights = [w for _, w in MODEL_POOL]
+MAX_RETRIES = 2  # 流式调用失败时最多重试次数
+
+def pick_model(exclude: set[str] | None = None) -> str:
+    """加权随机选模型，支持排除已失败的模型"""
+    pool = [(m, w) for m, w in MODEL_POOL if not exclude or m not in exclude]
+    if not pool:
+        # 全部排除时回退到完整池
+        pool = MODEL_POOL
+    names = [m for m, _ in pool]
+    weights = [w for _, w in pool]
     return random.choices(names, weights=weights, k=1)[0]
 
 
@@ -187,85 +194,114 @@ def _build_user_prompt(answers: dict, base_config: str, lang: str) -> str:
 请直接输出优化后的完整配置（Markdown格式），不要添加任何前缀说明。"""
 
 
-# ─── 非流式 ────────────────────────────────────────────────────────────────────
+# ─── 非流式（含重试）───────────────────────────────────────────────────────────
 
 def enhance_persona(answers: dict, base_config: str, lang: str = "zh") -> tuple[str, str, dict]:
-    model = pick_model()
-    system_prompt = _build_system_prompt(lang)
-    user_prompt = _build_user_prompt(answers, base_config, lang)
+    tried_models: set[str] = set()
 
-    if client is not None:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=8192,
-            temperature=0.7,
-        )
-        content = response.choices[0].message.content
-    else:
-        # openai < 1.0 降级路径
-        resp = _old_openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=8192,
-            temperature=0.7,
-        )
-        content = resp.choices[0].message.content
+    for attempt in range(MAX_RETRIES + 1):
+        model = pick_model(exclude=tried_models)
+        tried_models.add(model)
+        system_prompt = _build_system_prompt(lang)
+        user_prompt = _build_user_prompt(answers, base_config, lang)
 
-    meta = parse_meta_from_markdown(content, lang)
-    return content, model, meta
+        try:
+            if client is not None:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=8192,
+                    temperature=0.7,
+                )
+                content = response.choices[0].message.content
+            else:
+                resp = _old_openai.ChatCompletion.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=8192,
+                    temperature=0.7,
+                )
+                content = resp.choices[0].message.content
+
+            meta = parse_meta_from_markdown(content, lang)
+            return content, model, meta
+
+        except Exception as e:
+            if attempt < MAX_RETRIES and ("400" in str(e) or "format" in str(e)):
+                continue
+            raise
 
 
-# ─── 流式 ─────────────────────────────────────────────────────────────────────
+# ─── 流式（含重试）────────────────────────────────────────────────────────────
 
 def enhance_persona_stream(answers: dict, base_config: str, lang: str = "zh"):
-    model = pick_model()
-    system_prompt = _build_system_prompt(lang)
-    user_prompt = _build_user_prompt(answers, base_config, lang)
+    tried_models: set[str] = set()
 
-    yield "start", model
+    for attempt in range(MAX_RETRIES + 1):
+        model = pick_model(exclude=tried_models)
+        tried_models.add(model)
+        system_prompt = _build_system_prompt(lang)
+        user_prompt = _build_user_prompt(answers, base_config, lang)
 
-    full_text = ""
+        try:
+            if client is not None:
+                stream = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=8192,
+                    temperature=0.7,
+                    stream=True,
+                )
+            else:
+                stream = _old_openai.ChatCompletion.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=8192,
+                    temperature=0.7,
+                    stream=True,
+                )
 
-    if client is not None:
-        stream = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=8192,
-            temperature=0.7,
-            stream=True,
-        )
-        for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                full_text += delta
-                yield "delta", delta
-    else:
-        stream = _old_openai.ChatCompletion.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=8192,
-            temperature=0.7,
-            stream=True,
-        )
-        for chunk in stream:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                full_text += delta
-                yield "delta", delta
+            # 流创建成功，发送 start
+            yield "start", model
 
-    meta = parse_meta_from_markdown(full_text, lang)
-    yield "meta", json.dumps(meta, ensure_ascii=False)
-    yield "done", ""
+            full_text = ""
+            if client is not None:
+                for chunk in stream:
+                    # 检查是否有 error（某些模型在首个 chunk 返回错误）
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        delta = chunk.choices[0].delta.content
+                        full_text += delta
+                        yield "delta", delta
+            else:
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        full_text += delta
+                        yield "delta", delta
+
+            meta = parse_meta_from_markdown(full_text, lang)
+            yield "meta", json.dumps(meta, ensure_ascii=False)
+            yield "done", ""
+            return  # 成功，退出重试循环
+
+        except Exception as e:
+            err_msg = str(e)
+            if attempt < MAX_RETRIES and ("400" in err_msg or "format" in err_msg):
+                # 400 / format error → 换模型重试（尚未 yield start，客户端无感知）
+                continue
+            # 重试耗尽或非格式错误 → 上报
+            yield "start", model
+            yield "error", err_msg
+            return

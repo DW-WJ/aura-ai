@@ -136,6 +136,15 @@ export default function WelcomePage({ lang, onStart }: Props) {
 
       {/* Bottom gradient fade */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#080810] to-transparent pointer-events-none" />
+
+      {/* Owner entry - hidden link */}
+      <a
+        href="/admin"
+        className="fixed bottom-4 right-4 text-[#2a2a3a] hover:text-[#4a4a6a] text-xs transition-colors duration-300 select-none"
+        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}
+      >
+        ◈
+      </a>
     </div>
   );
 }
