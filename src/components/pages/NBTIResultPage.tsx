@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { NBTIResult } from './NBTIQuiz';
 import { rarityConfig } from '@/data/nbti-questions';
 
@@ -12,18 +12,17 @@ interface Props {
 export default function NBTIResultPage({ result, onRestart }: Props) {
   const [mounted, setMounted] = useState(false);
   const [showRoast, setShowRoast] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const t = setTimeout(() => setShowRoast(true), 1000);
-    return () => clearTimeout(t);
-  }, []);
+  const [aiPhase, setAiPhase] = useState<'idle' | 'loading' | 'streaming' | 'done' | 'error'>('idle');
+  const [aiText, setAiText] = useState('');
+  const [modelName, setModelName] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const aiBoxRef = useRef<HTMLDivElement>(null);
 
   const rarity = rarityConfig[result.rarity as keyof typeof rarityConfig];
-  const siliconPercent = Math.round((result.scores.silicon / (result.scores.silicon + result.scores.carbon)) * 100);
-  const carbonPercent = 100 - siliconPercent;
+  const totalSC = result.scores.silicon + result.scores.carbon;
+  const siliconPercent = totalSC > 0 ? Math.round((result.scores.silicon / totalSC) * 100) : 50;
+  const carbonPercent = totalSC > 0 ? Math.round((result.scores.carbon / totalSC) * 100) : 50;
 
-  // 计算各维度百分比
   const getPercent = (a: number, b: number) => Math.round((a / (a + b)) * 100) || 50;
   const dimensions = [
     { label: '外向 E', value: getPercent(result.scores.E, result.scores.I), opposite: '内向 I', oppositeValue: 100 - getPercent(result.scores.E, result.scores.I) },
@@ -32,154 +31,258 @@ export default function NBTIResultPage({ result, onRestart }: Props) {
     { label: '判断 J', value: getPercent(result.scores.J, result.scores.P), opposite: '感知 P', oppositeValue: 100 - getPercent(result.scores.J, result.scores.P) },
   ];
 
+  useEffect(() => {
+    setMounted(true);
+    const t = setTimeout(() => setShowRoast(true), 1000);
+    return () => clearTimeout(t);
+  }, []);
+
+  // 自动触发 AI 深度解读
+  useEffect(() => {
+    if (mounted && aiPhase === 'idle') {
+      startAIEnhance();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
+
+  // 自动滚动
+  useEffect(() => {
+    if (aiPhase === 'streaming' && aiBoxRef.current) {
+      aiBoxRef.current.scrollTop = aiBoxRef.current.scrollHeight;
+    }
+  }, [aiText, aiPhase]);
+
+  const startAIEnhance = async () => {
+    if (aiPhase === 'streaming') return;
+    setAiPhase('loading');
+    setAiText('');
+    setErrorMsg('');
+
+    const prompt = `你是 NBTI 人格分析师。用户的人格类型是 ${result.type}（${result.name}），稀有度：${rarity.label}，称号：${result.title}，灵魂元素：${result.element}，硅基/碳基：${siliconPercent}% 硅基 / ${carbonPercent}% 碳基。
+
+基础毒舌解读：${result.roast}
+
+请用幽默毒舌、犀利讽刺的风格，生成一段 200-300 字的"AI 深度解读"，包括：
+1. 这种人格在现实生活中最社死的一个典型场景（要具体、有画面感）
+2. 他们最容易被误解的地方，以及他们最想反驳但又不好意思说的话
+3. 一句让他们"被戳中"的人生建议
+
+风格要求：像朋友在群里吐槽你，不是一本正经的心理分析。多用"你"而不是"他们"。可以适当用点网络梗。`;
+
+    try {
+      const res = await fetch('/api/sbti-enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      setAiPhase('streaming');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+            if (currentEvent === 'start') {
+              setModelName(raw);
+            } else if (currentEvent === 'delta') {
+              try {
+                const parsed = JSON.parse(raw);
+                setAiText(p => p + (parsed.content ?? ''));
+              } catch {
+                setAiText(p => p + raw);
+              }
+            } else if (currentEvent === 'error') {
+              throw new Error(raw);
+            }
+          }
+        }
+      }
+      setAiPhase('done');
+    } catch (err: unknown) {
+      setAiPhase('error');
+      setErrorMsg(err instanceof Error ? err.message : 'AI 解读生成失败');
+    }
+  };
+
+  const handleShare = () => {
+    const text = `我的 NBTI 类型是 ${result.type}（${result.name}）\n${result.title} · ${rarity.label}级人格 · ${siliconPercent}% 硅基\n\n来测测你的灵魂光谱 👉 https://aura.dw.wjdc.ink`;
+    if (navigator.share) {
+      navigator.share({ text });
+    } else {
+      navigator.clipboard.writeText(text);
+      alert('结果已复制到剪贴板！');
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center py-12 px-4 relative overflow-hidden">
-      {/* Background glow */}
-      <div 
-        className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full blur-[150px] opacity-20 transition-all duration-1000"
-        style={{ backgroundColor: rarity.color }}
-      />
+    <div className="min-h-screen flex flex-col items-center px-4 py-8 text-white">
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        @keyframes float {
+          0%,100%{transform:translateY(0)}
+          50%{transform:translateY(-8px)}
+        }
+        @keyframes blink {
+          0%,100%{opacity:1}
+          50%{opacity:0}
+        }
+        .shimmer { background: linear-gradient(90deg, ${rarity.color}, #fff, ${rarity.color}); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: shimmer 3s linear infinite; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        .streaming-cursor { display: inline-block; width: 2px; height: 1em; background: ${rarity.color}; margin-left: 2px; vertical-align: middle; animation: blink 0.7s infinite; }
+      `}</style>
 
-      <div className={`relative z-10 w-full max-w-2xl transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-        
+      <div className="max-w-2xl w-full space-y-6">
+
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#1a1a2e] border border-[#2a2a3e] mb-4">
-            <span className="text-sm text-[#6b6b8a]">NBTI 测评结果</span>
+        <div className="text-center space-y-2">
+          <div className="text-xs uppercase tracking-widest" style={{ color: rarity.color }}>
+            {rarity.label} · NBTI 人格报告
           </div>
-          
-          {/* Type code */}
-          <div 
-            className="text-6xl md:text-8xl font-bold mb-2 transition-all duration-500"
-            style={{ color: rarity.color, textShadow: rarity.glow }}
-          >
-            {result.type}
-          </div>
-          
-          {/* Type name */}
-          <div className="text-2xl text-white font-medium mb-2">{result.name}</div>
-          
-          {/* Rarity badge */}
-          <div 
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium mb-4"
-            style={{ backgroundColor: `${rarity.color}20`, color: rarity.color, border: `1px solid ${rarity.color}40` }}
-          >
-            <span>✦</span>
-            <span>{rarity.label}</span>
-            <span className="text-xs opacity-60">({rarity.rate})</span>
-          </div>
-          
-          {/* Title */}
-          <div className="text-lg text-[#a0a0b0]">{result.title}</div>
+          <h1 className="text-5xl font-black shimmer">{result.type}</h1>
+          <div className="text-2xl font-bold" style={{ color: rarity.color }}>{result.name}</div>
         </div>
 
-        {/* Element & Silicon/Carbon */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-xl p-4 text-center">
-            <div className="text-sm text-[#6b6b8a] mb-2">灵魂元素</div>
-            <div className="text-2xl font-medium text-white">{result.element}</div>
+        {/* Rarity + Silicon/Carbon */}
+        <div className="flex justify-center gap-3">
+          <div className="px-4 py-2 rounded-full text-sm font-medium" style={{ background: `${rarity.color}20`, color: rarity.color, border: `1px solid ${rarity.color}40` }}>
+            {rarity.label}
           </div>
-          <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-xl p-4 text-center">
-            <div className="text-sm text-[#6b6b8a] mb-2">属性倾向</div>
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-[#06b6d4]">硅基 {siliconPercent}%</span>
-              <span className="text-[#6b6b8a]">|</span>
-              <span className="text-[#f59e0b]">碳基 {carbonPercent}%</span>
-            </div>
+          <div className="px-4 py-2 rounded-full text-sm font-medium bg-[#1a1a2e] text-[#a0a0b0] border border-[#2a2a3e]">
+            🧬 {siliconPercent}% 硅基 · {carbonPercent}% 碳基
           </div>
         </div>
 
-        {/* Dimensions */}
-        <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-xl p-6 mb-8">
-          <div className="text-sm text-[#6b6b8a] mb-4">维度分析</div>
-          <div className="space-y-4">
-            {dimensions.map((dim, i) => (
-              <div key={i}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-[#8b5cf6]">{dim.label} {dim.value}%</span>
-                  <span className="text-[#06b6d4]">{dim.opposite} {dim.oppositeValue}%</span>
-                </div>
-                <div className="h-2 bg-[#1a1a2e] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] transition-all duration-1000"
-                    style={{ width: `${dim.value}%` }}
-                  />
-                </div>
+        {/* Title */}
+        <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-2xl p-6 text-center">
+          <p className="text-lg text-white font-medium italic">"{result.title}"</p>
+          <p className="text-sm text-[#6b6b8a] mt-2">{result.element} · 灵魂元素</p>
+        </div>
+
+        {/* 维度条 */}
+        <div className="space-y-4">
+          <div className="text-xs text-[#6b6b8a] uppercase tracking-wider mb-1">人格维度</div>
+          {dimensions.map((dim) => (
+            <div key={dim.label}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-[#a0a0b0]">{dim.label} ({dim.value}%)</span>
+                <span className="text-[#a0a0b0]">{dim.oppositeValue}% {dim.opposite}</span>
               </div>
-            ))}
-          </div>
+              <div className="h-2 bg-[#1a1a2e] rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-1000"
+                  style={{ width: `${dim.value}%`, background: `linear-gradient(90deg, ${rarity.color}cc, ${rarity.color})` }} />
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Roast */}
-        <div 
-          className={`bg-[#0f0f1a] border border-[#2a2a3e] rounded-xl p-6 mb-8 transition-all duration-500 ${showRoast ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xl">🔥</span>
-            <span className="text-sm text-[#f59e0b] font-medium">毒舌解读</span>
+        {/* 基础毒舌解读 */}
+        <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-2xl">🔥</span>
+            <span className="text-sm font-bold" style={{ color: rarity.color }}>基础毒舌解读</span>
           </div>
           <p className="text-[#b0b0c0] leading-relaxed">{result.roast}</p>
         </div>
 
-        {/* Strengths & Weaknesses */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <span>💪</span>
-              <span className="text-sm text-[#22c55e] font-medium">优势</span>
+        {/* AI 深度解读 */}
+        <div className="bg-[#0f0f1a] border rounded-2xl p-5" style={{ borderColor: aiPhase === 'streaming' ? `${rarity.color}60` : '#2a2a3e' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-2xl">🤖</span>
+            <span className="text-sm font-bold" style={{ color: rarity.color }}>
+              {aiPhase === 'idle' || aiPhase === 'loading' ? '🤖 AI 深度解读生成中...' :
+               aiPhase === 'streaming' ? '🤖 AI 深度解读中' :
+               aiPhase === 'done' ? '✅ AI 深度解读' : '❌ AI 出错了'}
+            </span>
+            {modelName && <span className="text-xs text-[#6b6b8a]">{modelName}</span>}
+          </div>
+
+          {aiPhase === 'loading' && (
+            <div className="flex items-center gap-2 py-2">
+              <span className="text-sm text-[#6b6b8a]">AI 正在思考你的灵魂...</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+          )}
+
+          {aiPhase === 'error' && (
+            <div>
+              <p className="text-sm text-red-400">出错了：{errorMsg}</p>
+              <button onClick={startAIEnhance} className="mt-2 text-xs text-[#6b6b8a] hover:text-white underline">
+                重试
+              </button>
+            </div>
+          )}
+
+          {(aiPhase === 'streaming' || aiPhase === 'done') && (
+            <div ref={aiBoxRef} className="text-sm text-[#b0b0c0] leading-relaxed max-h-80 overflow-y-auto scrollbar-thin">
+              {aiText}
+              {aiPhase === 'streaming' && <span className="streaming-cursor" />}
+            </div>
+          )}
+
+          {aiPhase === 'done' && (
+            <button onClick={startAIEnhance} className="mt-3 text-xs text-[#6b6b8a] hover:text-white transition-colors">
+              重新生成 ↻
+            </button>
+          )}
+        </div>
+
+        {/* Strengths & Weaknesses */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-2xl p-5">
+            <div className="text-xs text-[#6b6b8a] uppercase tracking-wider mb-2">💪 优势</div>
+            <div className="space-y-1">
               {result.strengths.map((s, i) => (
-                <span key={i} className="px-3 py-1 bg-[#22c55e]/10 text-[#22c55e] rounded-full text-sm border border-[#22c55e]/20">
-                  {s}
-                </span>
+                <div key={i} className="text-sm text-[#a0a0b0]">• {s}</div>
               ))}
             </div>
           </div>
-          <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <span>😅</span>
-              <span className="text-sm text-[#ef4444] font-medium">短板</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
+          <div className="bg-[#0f0f1a] border border-[#2a2a3e] rounded-2xl p-5">
+            <div className="text-xs text-[#6b6b8a] uppercase tracking-wider mb-2">😅 劣势</div>
+            <div className="space-y-1">
               {result.weaknesses.map((w, i) => (
-                <span key={i} className="px-3 py-1 bg-[#ef4444]/10 text-[#ef4444] rounded-full text-sm border border-[#ef4444]/20">
-                  {w}
-                </span>
+                <div key={i} className="text-sm text-[#a0a0b0]">• {w}</div>
               ))}
             </div>
           </div>
         </div>
 
         {/* Motto */}
-        <div className="bg-gradient-to-r from-[#8b5cf6]/10 to-[#06b6d4]/10 border border-[#8b5cf6]/20 rounded-xl p-6 mb-8 text-center">
-          <div className="text-sm text-[#6b6b8a] mb-2">人生格言</div>
+        <div className="text-center py-2">
           <p className="text-lg text-white font-medium italic">"{result.motto}"</p>
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={onRestart}
-            className="px-8 py-3 bg-[#1a1a2e] border border-[#2a2a3e] text-white rounded-xl hover:bg-[#2a2a3e] transition-all"
-          >
-            再测一次
+        <div className="flex gap-3">
+          <button onClick={handleShare} className="flex-1 py-3 rounded-xl font-bold text-white transition-all active:scale-[0.98]"
+            style={{ background: `linear-gradient(135deg, ${rarity.color}, ${rarity.color}cc)` }}>
+            分享我的 NBTI 📤
           </button>
-          <button
-            onClick={() => {
-              const text = `我的 NBTI 类型是 ${result.type} - ${result.name}\n${result.title}\n\n${result.roast}`;
-              if (navigator.share) {
-                navigator.share({ title: 'NBTI 测评结果', text });
-              } else {
-                navigator.clipboard.writeText(text);
-                alert('已复制到剪贴板！');
-              }
-            }}
-            className="px-8 py-3 bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] text-white rounded-xl hover:shadow-lg hover:shadow-purple-500/25 transition-all"
-          >
-            分享结果
+          <button onClick={onRestart} className="flex-1 py-3 rounded-xl font-bold bg-[#1a1a2e] border border-[#2a2a3e] text-[#a0a0c0] hover:bg-[#1f1f33] hover:text-white transition-all active:scale-[0.98]">
+            再测一次 🔄
           </button>
         </div>
+
+        <p className="text-center text-xs text-[#3a3a4a]">
+          NBTI · 纯属娱乐 · 认真你就输了
+        </p>
       </div>
     </div>
   );
