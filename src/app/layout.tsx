@@ -5,6 +5,7 @@ import Navigation from "@/components/ui/Navigation";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PWAProvider from "@/components/PWAProvider";
 import AuthProvider from "@/components/AuthProvider";
+import PageTracker from "@/components/PageTracker";
 import "./globals.css";
 
 export const metadata: Metadata = {

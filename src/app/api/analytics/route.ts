@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         });
 
         // 异步更新每日统计（不阻塞响应）
-        updateDailyStats(path, fingerprint).catch(console.error);
+        updateDailyStats(path).catch(console.error);
 
         return NextResponse.json({ success: true });
       }
@@ -30,16 +30,21 @@ export async function POST(request: NextRequest) {
       case 'session_start': {
         const { sessionId, fingerprint, visitorIp, firstPath, userId } = data;
 
-        await prisma.visitSession.create({
-          data: {
-            id: sessionId,
-            fingerprint: fingerprint || '',
-            visitorIp: visitorIp || '',
-            firstPath: firstPath || '/',
-            lastPath: firstPath || '/',
-            userId: userId || null,
-          }
-        });
+        try {
+          await prisma.visitSession.create({
+            data: {
+              id: sessionId,
+              fingerprint: fingerprint || '',
+              visitorIp: visitorIp || '',
+              firstPath: firstPath || '/',
+              lastPath: firstPath || '/',
+              userId: userId || null,
+            }
+          });
+        } catch (e: any) {
+          if (e.code !== 'P2002') throw e;
+          // session 已存在，忽略
+        }
 
         return NextResponse.json({ success: true });
       }
@@ -56,18 +61,13 @@ export async function POST(request: NextRequest) {
       }
 
       case 'quiz_start': {
-        const { sessionId } = data;
-
-        // 更新每日统计中的 quizStarted
         await incrementDailyStat('quizStarted');
-
         return NextResponse.json({ success: true });
       }
 
       case 'quiz_complete': {
         const { sessionId } = data;
 
-        // 标记会话完成
         if (sessionId) {
           await prisma.visitSession.update({
             where: { id: sessionId },
@@ -75,9 +75,7 @@ export async function POST(request: NextRequest) {
           }).catch(() => {});
         }
 
-        // 更新每日统计
         await incrementDailyStat('quizCompleted');
-
         return NextResponse.json({ success: true });
       }
 
@@ -96,9 +94,22 @@ export async function POST(request: NextRequest) {
           }
         });
 
-        // 更新每日统计
         await incrementDailyStat('aiEnhanced');
+        return NextResponse.json({ success: true });
+      }
 
+      // ── 新增：配置操作追踪 ───────────────────────
+      case 'config_copy':
+      case 'config_download': {
+        const { fingerprint, userId } = data;
+        await prisma.analyticsEvent.create({
+          data: {
+            userId: userId || null,
+            eventName: type,
+            properties: JSON.stringify({ fingerprint }),
+            url: data.path || '',
+          }
+        });
         return NextResponse.json({ success: true });
       }
 
@@ -115,35 +126,32 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const range = searchParams.get('range') || '7d'; // 7d, 30d, all
+    const range = searchParams.get('range') || '7d';
 
     const now = new Date();
     let startDate = new Date();
 
     switch (range) {
-      case '7d':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case '30d':
-        startDate.setDate(now.getDate() - 30);
-        break;
-      case 'all':
-        startDate = new Date('2020-01-01');
-        break;
+      case '7d': startDate.setDate(now.getDate() - 7); break;
+      case '30d': startDate.setDate(now.getDate() - 30); break;
+      case 'all': startDate = new Date('2020-01-01'); break;
     }
 
     // 总体统计
-    const [totalPV, totalUV, totalSessions, totalQuizCompleted, totalAiEnhanced] = await Promise.all([
+    const [totalPV, totalSessions, totalQuizCompleted, totalAiEnhanced] = await Promise.all([
       prisma.pageView.count({ where: { createdAt: { gte: startDate } } }),
-      prisma.pageView.groupBy({
-        by: ['fingerprint'],
-        where: { createdAt: { gte: startDate }, fingerprint: { not: '' } },
-        _count: true,
-      }).then(r => r.length),
       prisma.visitSession.count({ where: { createdAt: { gte: startDate } } }),
       prisma.visitSession.count({ where: { createdAt: { gte: startDate }, completed: true } }),
       prisma.apiLog.count({ where: { createdAt: { gte: startDate } } }),
     ]);
+
+    // UV（按指纹去重）
+    const uvData = await prisma.pageView.groupBy({
+      by: ['fingerprint'],
+      where: { createdAt: { gte: startDate }, fingerprint: { not: '' } },
+      _count: true,
+    });
+    const totalUV = uvData.length;
 
     // 每日趋势
     const dailyStats = await prisma.dailyStats.findMany({
@@ -161,10 +169,26 @@ export async function GET(request: NextRequest) {
       take: 10,
     });
 
-    // API 调用统计
+    // API 统计
     const apiStats = await prisma.apiLog.groupBy({
       by: ['status'],
       where: { createdAt: { gte: startDate } },
+      _count: true,
+    });
+
+    // 模型分布（AI 增强）
+    const modelStats = await prisma.apiLog.groupBy({
+      by: ['model'],
+      where: { createdAt: { gte: startDate }, model: { not: '' } },
+      _count: true,
+      orderBy: { _count: { model: 'desc' } },
+      take: 10,
+    });
+
+    // 配置操作
+    const configEvents = await prisma.analyticsEvent.groupBy({
+      by: ['eventName'],
+      where: { timestamp: { gte: startDate } },
       _count: true,
     });
 
@@ -173,26 +197,20 @@ export async function GET(request: NextRequest) {
       where: { createdAt: { gte: startDate } },
       orderBy: { createdAt: 'desc' },
       take: 20,
-      select: {
-        path: true,
-        fingerprint: true,
-        createdAt: true,
-        duration: true,
-      }
+      select: { path: true, fingerprint: true, createdAt: true, duration: true },
     });
 
+    const conversionRate = totalSessions > 0
+      ? ((totalQuizCompleted / totalSessions) * 100).toFixed(1)
+      : '0';
+
     return NextResponse.json({
-      summary: {
-        totalPV,
-        totalUV,
-        totalSessions,
-        totalQuizCompleted,
-        totalAiEnhanced,
-        conversionRate: totalSessions > 0 ? ((totalQuizCompleted / totalSessions) * 100).toFixed(1) : 0,
-      },
+      summary: { totalPV, totalUV, totalSessions, totalQuizCompleted, totalAiEnhanced, conversionRate },
       dailyStats,
       topPages: topPages.map(p => ({ path: p.path, count: p._count.path })),
       apiStats,
+      modelStats: modelStats.map(m => ({ model: m.model, count: m._count })),
+      configEvents: configEvents.map(e => ({ event: e.eventName, count: e._count })),
       recentVisits,
     });
 
@@ -202,69 +220,86 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 辅助函数：获取今日日期（UTC 0点）
+// ── 辅助函数 ──────────────────────────────────────────────
+
 function getToday(): Date {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return today;
 }
 
-// 辅助函数：安全更新每日统计
 async function incrementDailyStat(field: 'pv' | 'uv' | 'quizStarted' | 'quizCompleted' | 'aiEnhanced') {
   const today = getToday();
-  
+
   try {
-    // 先尝试查找现有记录
     const existing = await prisma.dailyStats.findUnique({
       where: { date_path: { date: today, path: '' } }
     });
-    
+
     if (existing) {
-      // 更新现有记录
       await prisma.dailyStats.update({
         where: { id: existing.id },
         data: { [field]: { increment: 1 } }
       });
     } else {
-      // 创建新记录
-      await prisma.dailyStats.create({
-        data: { date: today, path: '', [field]: 1 }
-      });
+      try {
+        await prisma.dailyStats.create({
+          data: { date: today, path: '', [field]: 1 }
+        });
+      } catch (e: any) {
+        if (e.code !== 'P2002') throw e;
+        // 并发创建冲突，重新读取并更新
+        const retry = await prisma.dailyStats.findUnique({
+          where: { date_path: { date: today, path: '' } }
+        });
+        if (retry) {
+          await prisma.dailyStats.update({
+            where: { id: retry.id },
+            data: { [field]: { increment: 1 } }
+          });
+        }
+      }
     }
   } catch (error) {
-    // 静默失败，不影响主流程
     console.error('[Analytics] DailyStats update failed:', error);
   }
 }
 
-// 辅助函数：更新每日统计
-async function updateDailyStats(path: string, fingerprint: string) {
+async function updateDailyStats(path: string) {
   const today = getToday();
-
-  // 更新全站统计
   await incrementDailyStat('pv');
 
-  // 更新页面统计
   if (path && path !== '/') {
     try {
       const existing = await prisma.dailyStats.findUnique({
         where: { date_path: { date: today, path } }
       });
-      
+
       if (existing) {
         await prisma.dailyStats.update({
           where: { id: existing.id },
           data: { pv: { increment: 1 } }
         });
       } else {
-        await prisma.dailyStats.create({
-          data: { date: today, path, pv: 1 }
-        });
+        try {
+          await prisma.dailyStats.create({
+            data: { date: today, path, pv: 1 }
+          });
+        } catch (e: any) {
+          if (e.code !== 'P2002') throw e;
+          const retry = await prisma.dailyStats.findUnique({
+            where: { date_path: { date: today, path } }
+          });
+          if (retry) {
+            await prisma.dailyStats.update({
+              where: { id: retry.id },
+              data: { pv: { increment: 1 } }
+            });
+          }
+        }
       }
     } catch (error) {
       console.error('[Analytics] Page stats update failed:', error);
     }
   }
-
-  // UV 需要去重，这里简化处理（实际应该用 Redis 或定时任务）
 }

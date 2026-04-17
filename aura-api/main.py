@@ -9,9 +9,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Literal, Iterator
 
-from longcat_client import enhance_persona, enhance_persona_stream, MODEL_POOL
+from longcat_client import enhance_persona, enhance_persona_stream, MODEL_POOL, pick_model, client, MAX_RETRIES
 
-app = FastAPI(title="AURA AI Enhancement API", version="1.3.0")
+app = FastAPI(title="AURA AI Enhancement API", version="1.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +28,11 @@ class EnhanceRequest(BaseModel):
     answers: dict[str, str]
     base_config: str
     lang: Literal["zh", "en"] = "zh"
+
+
+class SBTIInterpretRequest(BaseModel):
+    prompt: str
+    lang: str = "zh"
 
 
 # ─── SSE 工具 ─────────────────────────────────────────────────────────────────
@@ -48,7 +53,6 @@ def event_generator(
             if label == "start":
                 yield sse("start", value)
             elif label == "meta":
-                # 元数据（名字/描述/性格标签），value 已经是 JSON 字符串
                 yield sse("meta", value)
             elif label == "delta":
                 yield sse("delta", json.dumps({"content": value}))
@@ -56,6 +60,46 @@ def event_generator(
                 yield sse("done", "")
     except Exception as e:
         yield sse("error", str(e))
+
+
+def sbti_stream_generator(prompt: str, lang: str) -> Iterator[bytes]:
+    """Generate SSE stream for SBTI interpretation"""
+    tried = set()
+    for attempt in range(MAX_RETRIES + 1):
+        model = pick_model(exclude=tried)
+        tried.add(model)
+        system_msg = "你是一个幽默毒舌的SBTI人格分析师。你的解读风格：1. 像朋友吐槽一样自然，不一本正经；2. 带点网络梗和自嘲；3. 200-300字左右；4. 分点要有但不要太正式；5. 最后要给一句扎心的人生建议。"
+
+        try:
+            if client is not None:
+                stream = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=1024,
+                    temperature=0.8,
+                    stream=True,
+                )
+            else:
+                yield sse("error", "OpenAI client not available")
+                return
+
+            yield sse("start", model)
+
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    delta = chunk.choices[0].delta.content
+                    yield sse("delta", json.dumps({"content": delta}))
+
+            yield sse("done", "")
+            return
+
+        except Exception as e:
+            if attempt == MAX_RETRIES:
+                yield sse("error", str(e))
+                return
 
 
 # ─── 流式路由 ─────────────────────────────────────────────────────────────────
@@ -73,6 +117,17 @@ async def enhance_stream(req: EnhanceRequest):
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@app.post("/sbti-interpret")
+async def sbti_interpret(req: SBTIInterpretRequest):
+    if not req.prompt:
+        raise HTTPException(status_code=400, detail="prompt 不能为空")
+    return StreamingResponse(
+        sbti_stream_generator(req.prompt, req.lang),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
