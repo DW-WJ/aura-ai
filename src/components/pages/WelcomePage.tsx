@@ -115,6 +115,14 @@ export default function WelcomePage({ lang, onStart }: Props) {
               </svg>
             </span>
           </button>
+          
+          {/* Login link for existing users */}
+          <p className="mt-4 text-sm text-[#6b6b8a]">
+            {lang === 'zh' ? '已有账号？' : 'Have an account?'}{' '}
+            <a href="/auth/signin" className="text-[#8b5cf6] hover:text-[#a78bfa] transition-colors">
+              {lang === 'zh' ? '登录' : 'Sign in'}
+            </a>
+          </p>
         </div>
 
         {/* features */}

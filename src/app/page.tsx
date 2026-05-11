@@ -13,6 +13,7 @@ import NBTIResultPage from '@/components/pages/NBTIResultPage';
 import SBTIQuiz from '@/components/pages/SBTIQuiz';
 import SBTIResultPage from '@/components/pages/SBTIResultPage';
 import { SBTIPersonality } from '@/data/sbti-questions';
+import Navigation from '@/components/ui/Navigation';
 
 type AppMode = 'aura' | 'nbti' | 'sbti';
 
@@ -83,6 +84,7 @@ export default function Home() {
           .a-footer { animation: fadeUp 0.6s ease 0.6s both; }
           @keyframes fadeUp { from { opacity:0; transform:translateY(24px) } to { opacity:1; transform:translateY(0) } }
         `}</style>
+        <Navigation />
         <HomePage onSelectAURA={handleStartAURA} onSelectNBTI={handleStartNBTI} onSelectSBTI={handleStartSBTI} />
         <a href="/admin" className="fixed bottom-4 right-4 text-[#2a2a3a] hover:text-[#4a4a6a] text-xs transition-colors duration-300 select-none" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>◈</a>
       </main>

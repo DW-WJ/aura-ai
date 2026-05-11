@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
+import { generateUniqueSlug } from '@/lib/auth-workspace';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,17 +27,28 @@ export async function POST(request: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const displayName = name || email.split('@')[0];
 
+    // 创建用户
     const user = await prisma.user.create({
-      data: {
-        email,
-        name: name || email.split('@')[0],
-        passwordHash,
-      },
+      data: { email, name: displayName, passwordHash },
       select: { id: true, email: true, name: true, createdAt: true },
     });
 
-    return NextResponse.json({ success: true, user }, { status: 201 });
+    // 自动创建个人工作空间
+    const slug = await generateUniqueSlug(displayName);
+    const workspace = await prisma.workspace.create({
+      data: {
+        name: `${displayName} 的空间`,
+        slug,
+        members: {
+          create: { userId: user.id, role: 'owner' },
+        },
+      },
+      select: { id: true, name: true, slug: true },
+    });
+
+    return NextResponse.json({ success: true, user, workspace }, { status: 201 });
   } catch (error) {
     console.error('[Register]', error);
     return NextResponse.json({ error: '注册失败，请稍后重试' }, { status: 500 });

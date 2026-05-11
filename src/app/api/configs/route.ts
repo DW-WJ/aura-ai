@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/app/api/auth/[...nextauth]/route';
 import prisma from '@/lib/prisma';
+import { getWorkspaceContext } from '@/lib/auth-workspace';
 
-// GET /api/configs - 获取当前用户的所有配置
-export async function GET() {
+// GET /api/configs - 获取当前工作空间的配置
+// Header: x-workspace-id 可选，默认取用户第一个工作空间
+export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await getWorkspaceContext(request);
+    if (ctx instanceof NextResponse) return ctx;
 
     const configs = await prisma.userConfig.findMany({
-      where: { userId: session.user.id },
+      where: { workspaceId: ctx.workspaceId },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -30,13 +30,12 @@ export async function GET() {
   }
 }
 
-// POST /api/configs - 保存新配置
+// POST /api/configs - 在当前工作空间保存配置
+// Header: x-workspace-id 可选
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await getWorkspaceContext(request);
+    if (ctx instanceof NextResponse) return ctx;
 
     const { name, configText, answersJson, statsJson, isPublic } = await request.json();
 
@@ -44,17 +43,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name 和 configText 必填' }, { status: 400 });
     }
 
-    // 限制每用户最多 20 个配置
-    const count = await prisma.userConfig.count({
-      where: { userId: session.user.id },
-    });
-    if (count >= 20) {
-      return NextResponse.json({ error: '最多保存 20 个配置，请先删除旧的' }, { status: 429 });
+    // free 计划限制 20 个配置
+    if (ctx.workspace.plan === 'free') {
+      const count = await prisma.userConfig.count({
+        where: { workspaceId: ctx.workspaceId },
+      });
+      if (count >= 20) {
+        return NextResponse.json({ error: '免费版最多保存 20 个配置，请先删除旧的或升级专业版' }, { status: 429 });
+      }
     }
 
     const config = await prisma.userConfig.create({
       data: {
-        userId: session.user.id,
+        userId: ctx.userId,
+        workspaceId: ctx.workspaceId,
         name,
         configText,
         answersJson: answersJson ? JSON.stringify(answersJson) : '{}',

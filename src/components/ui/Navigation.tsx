@@ -3,15 +3,18 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+  const { data: session, status } = useSession();
 
-  const links = [
+  const links: Array<{ href: string; label: string; highlight?: boolean }> = [
     { href: '/', label: '首页' },
     { href: '/features', label: '功能' },
     { href: '/use-cases', label: '场景' },
+    { href: '/loadings', label: '⚡ 加载动画', highlight: true },
     { href: '/about', label: '关于' },
     { href: '/pricing', label: '价格' },
     { href: '/blog', label: '博客' },
@@ -45,6 +48,8 @@ export default function Navigation() {
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                   isActive(link.href)
                     ? 'bg-[#8b5cf6]/20 text-[#8b5cf6]'
+                    : link.highlight
+                    ? 'text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10'
                     : 'text-[#9090b0] hover:text-white hover:bg-white/[0.05]'
                 }`}
               >
@@ -55,11 +60,38 @@ export default function Navigation() {
 
           {/* CTA + Mobile Menu Button */}
           <div className="flex items-center gap-3">
+            {/* Auth */}
+            {status === 'loading' ? (
+              <div className="w-16 h-8 bg-white/[0.05] rounded-lg animate-pulse hidden md:block" />
+            ) : session?.user ? (
+              <div className="hidden md:flex items-center gap-2">
+                <Link
+                  href="/dashboard"
+                  className="text-sm text-[#9090b0] hover:text-white transition-colors"
+                >
+                  {session.user.name || session.user.email}
+                </Link>
+                <button
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                  className="text-sm text-[#6b6b8a] hover:text-[#f87171] transition-colors"
+                >
+                  退出
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/auth/signin"
+                className="hidden md:block bg-white/[0.08] text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-white/[0.12] transition-all"
+              >
+                登录
+              </Link>
+            )}
+            
             <Link
-              href="/"
+              href="/dashboard"
               className="hidden md:block bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:shadow-lg transition-all"
             >
-              开始测评
+              {session ? '控制台' : '开始测评'}
             </Link>
             
             <button
@@ -90,18 +122,48 @@ export default function Navigation() {
                 className={`block px-4 py-3 rounded-lg text-base font-medium transition-all ${
                   isActive(link.href)
                     ? 'bg-[#8b5cf6]/20 text-[#8b5cf6]'
+                    : link.highlight
+                    ? 'text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10'
                     : 'text-[#9090b0] hover:text-white hover:bg-white/[0.05]'
                 }`}
               >
                 {link.label}
               </Link>
             ))}
+            
+            {/* Mobile auth */}
+            {session?.user ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-4 py-3 rounded-lg text-base font-medium text-[#9090b0] hover:text-white hover:bg-white/[0.05]"
+                >
+                  控制台 ({session.user.name || session.user.email})
+                </Link>
+                <button
+                  onClick={() => { setMobileMenuOpen(false); signOut({ callbackUrl: '/' }); }}
+                  className="block w-full text-left px-4 py-3 rounded-lg text-base font-medium text-[#f87171] hover:bg-white/[0.05]"
+                >
+                  退出登录
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/auth/signin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-4 py-3 rounded-lg text-base font-medium text-[#8b5cf6] hover:bg-[#8b5cf6]/10"
+              >
+                登录 / 注册
+              </Link>
+            )}
+            
             <Link
-              href="/"
+              href="/dashboard"
               onClick={() => setMobileMenuOpen(false)}
               className="block w-full bg-gradient-to-r from-[#8b5cf6] to-[#6366f1] text-white px-4 py-3 rounded-lg font-semibold text-center mt-4"
             >
-              开始测评
+              {session ? '控制台' : '开始测评'}
             </Link>
           </div>
         </div>

@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/app/api/auth/[...nextauth]/route';
 import prisma from '@/lib/prisma';
+import { getWorkspaceContext } from '@/lib/auth-workspace';
 
-// PATCH /api/configs/[id] - 更新配置
+// PATCH /api/configs/[id] - 更新配置（workspace 隔离）
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await getWorkspaceContext(request);
+    if (ctx instanceof NextResponse) return ctx;
 
     const { id } = await params;
     const { name, configText, answersJson, statsJson, isPublic } = await request.json();
 
-    // 检查配置归属
     const existing = await prisma.userConfig.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspaceId },
     });
 
     if (!existing) {
@@ -40,19 +37,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-// DELETE /api/configs/[id] - 删除配置
+// DELETE /api/configs/[id] - 删除配置（workspace 隔离）
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const ctx = await getWorkspaceContext(request);
+    if (ctx instanceof NextResponse) return ctx;
 
     const { id } = await params;
 
-    // 检查配置归属
     const existing = await prisma.userConfig.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, workspaceId: ctx.workspaceId },
     });
 
     if (!existing) {

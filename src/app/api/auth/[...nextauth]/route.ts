@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { generateUniqueSlug } from "@/lib/auth-workspace";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -60,6 +61,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) session.user.id = token.id as string;
       return session;
+    },
+    async signIn({ user }) {
+      // Google OAuth 用户首次登录时自动创建个人工作空间
+      if (user.email && !user.id?.match(/^[0-9a-f]{24}$/)) return true;
+      try {
+        const existing = await prisma.workspaceMember.findFirst({
+          where: { userId: user.id as string },
+        });
+        if (!existing) {
+          const name = user.name || user.email?.split("@")[0] || "My Workspace";
+          const slug = await generateUniqueSlug(name);
+          const ws = await prisma.workspace.create({
+            data: { name, slug, plan: "free" },
+          });
+          await prisma.workspaceMember.create({
+            data: { workspaceId: ws.id, userId: user.id as string, role: "owner" },
+          });
+        }
+      } catch (e) {
+        console.error("Workspace creation error:", e);
+      }
+      return true;
     },
   },
 });
