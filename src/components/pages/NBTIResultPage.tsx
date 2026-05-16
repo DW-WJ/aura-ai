@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { NBTIResult } from './NBTIQuiz';
 import { rarityConfig } from '@/data/nbti-questions';
+import { useSaveConfig } from '@/lib/useSaveConfig';
 
 interface Props {
   result: NBTIResult;
@@ -22,6 +23,14 @@ export default function NBTIResultPage({ result, onRestart }: Props) {
   const totalSC = result.scores.silicon + result.scores.carbon;
   const siliconPercent = totalSC > 0 ? Math.round((result.scores.silicon / totalSC) * 100) : 50;
   const carbonPercent = totalSC > 0 ? Math.round((result.scores.carbon / totalSC) * 100) : 50;
+
+  // Auto-save to workspace
+  const { saveStatus } = useSaveConfig({
+    quizType: 'nbti',
+    name: `NBTI ${result.type} - ${result.name}`,
+    configText: JSON.stringify({ type: result.type, name: result.name, title: result.title, rarity: result.rarity, element: result.element, roast: result.roast, strengths: result.strengths, weaknesses: result.weaknesses, motto: result.motto, scores: result.scores }, null, 2),
+    statsJson: { quizType: 'nbti', type: result.type, rarity: result.rarity },
+  });
 
   const getPercent = (a: number, b: number) => Math.round((a / (a + b)) * 100) || 50;
   const dimensions = [
@@ -159,6 +168,10 @@ export default function NBTIResultPage({ result, onRestart }: Props) {
           </div>
           <h1 className="text-5xl font-black shimmer">{result.type}</h1>
           <div className="text-2xl font-bold" style={{ color: rarity.color }}>{result.name}</div>
+          {/* Save status */}
+          {saveStatus === 'saving' && <div className="text-xs text-[#6b6b8a] animate-pulse mt-1">💾 正在保存…</div>}
+          {saveStatus === 'saved' && <div className="text-xs text-[#10b981] mt-1">✅ 已保存到工作空间</div>}
+          {saveStatus === 'error' && <div className="text-xs text-[#f87171] mt-1">⚠️ 保存失败（未登录）</div>}
         </div>
 
         {/* Rarity + Silicon/Carbon */}

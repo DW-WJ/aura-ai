@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { RARITY_COLORS } from '@/data/sbti-questions';
+import { useSaveConfig } from '@/lib/useSaveConfig';
 
 interface SBTIPersonality {
   id: string;
@@ -68,6 +69,14 @@ export default function SBTIResultPage({ result, onRestart }: Props) {
   const rarityLabel = RARITY_LABELS[result.rarity];
   const rarityScore = RARITY_SCORE[result.rarity];
   const rarityColor = RARITY_COLORS[result.rarity];
+
+  // Auto-save to workspace
+  const { saveStatus } = useSaveConfig({
+    quizType: 'sbti',
+    name: `SBTI ${result.emoji} ${result.name}`,
+    configText: JSON.stringify({ id: result.id, name: result.name, emoji: result.emoji, rarity: result.rarity, description: result.description, detail: result.detail }, null, 2),
+    statsJson: { quizType: 'sbti', id: result.id, rarity: result.rarity },
+  });
 
   useEffect(() => {
     setVisible(true);
@@ -204,6 +213,10 @@ export default function SBTIResultPage({ result, onRestart }: Props) {
         <h1 className={`fade-up text-5xl font-black mb-4 shimmer-text`} style={{ animationDelay: '300ms' }}>
           {result.name}
         </h1>
+        {/* Save status */}
+        {saveStatus === 'saving' && <div className="fade-up text-xs text-[#6b6b8a] animate-pulse mb-4">💾 正在保存…</div>}
+        {saveStatus === 'saved' && <div className="fade-up text-xs text-[#10b981] mb-4">✅ 已保存到工作空间</div>}
+        {saveStatus === 'error' && <div className="fade-up text-xs text-[#f87171] mb-4">⚠️ 保存失败（未登录）</div>}
 
         {/* ID */}
         <div className="fade-up text-sm text-[#4a4a6a] mb-8 font-mono tracking-widest" style={{ animationDelay: '400ms' }}>

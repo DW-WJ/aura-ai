@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { BuildResult, Lang, ResultTab } from '@/types';
+import { useSaveConfig } from '@/lib/useSaveConfig';
 import RadarChart from './RadarChart';
 import StatsBars from './StatsBars';
 import Confetti from './Confetti';
@@ -143,7 +144,19 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
     growLines: enhancedMeta?.growLines?.length ? enhancedMeta.growLines : result.growLines,
   };
 
+  // Auto-save to workspace
   const hasEnhanced = streamPhase === 'done' || streamPhase === 'error';
+  const { saveStatus } = useSaveConfig(
+    hasEnhanced || !aiEnhanceEnabled
+      ? {
+          quizType: 'aura',
+          name: `${display.name} - ${display.typeName}`,
+          configText: display.configText,
+          statsJson: { ...result.stats, quizType: 'aura', typeName: display.typeName },
+          answersJson: answers,
+        }
+      : null
+  );
 
   // AI Stream effect
   useEffect(() => {
@@ -264,6 +277,32 @@ export default function ResultPage({ result, lang, answers, onRestart }: Props) 
 
       {/* Confetti */}
       <Confetti active={showConfetti} />
+
+      {/* Save Status */}
+      {saveStatus === 'saving' && (
+        <div className="w-full max-w-[720px] flex items-center gap-2 text-xs text-[#6b6b8a] animate-pulse">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2v4m0 12v4m-7.07-3.93l2.83-2.83m8.48-8.48l2.83-2.83M2 12h4m12 0h4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83" />
+          </svg>
+          正在保存到工作空间…
+        </div>
+      )}
+      {saveStatus === 'saved' && (
+        <div className="w-full max-w-[720px] flex items-center gap-2 text-xs text-[#10b981]">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          已保存到工作空间
+        </div>
+      )}
+      {saveStatus === 'error' && (
+        <div className="w-full max-w-[720px] flex items-center gap-2 text-xs text-[#f87171]">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+          </svg>
+          保存失败（未登录或网络错误）
+        </div>
+      )}
 
       {/* AI Enhancement Toggle */}
       {streamPhase === 'idle' && (

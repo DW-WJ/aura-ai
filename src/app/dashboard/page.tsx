@@ -264,6 +264,10 @@ export default function DashboardPage() {
               <div className="text-sm text-white font-medium">{user?.name}</div>
               <div className="text-xs text-[#6b6b8a]">{user?.email}</div>
             </div>
+            <Link href="/settings"
+              className="bg-transparent border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-[#6b6b8a] hover:text-white hover:border-white/[0.2] transition-all">
+              ⚙️ 设置
+            </Link>
             <button
               onClick={() => signOut({ callbackUrl: '/' })}
               className="bg-transparent border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-[#6b6b8a] cursor-pointer hover:text-white hover:border-white/[0.2] transition-all"
@@ -343,13 +347,14 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   {configs.slice(0, 3).map(config => (
-                    <div key={config.id} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0">
-                      <div>
+                    <Link key={config.id} href={`/dashboard/configs/${config.id}`}
+                      className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] -mx-2 px-2 transition-colors">
+                      <div className="flex-1">
                         <div className="text-sm text-white font-medium">{config.name}</div>
                         <div className="text-xs text-[#6b6b8a]">{new Date(config.updatedAt).toLocaleDateString('zh-CN')}</div>
                       </div>
-                      {config.isPublic && <span className="text-[10px] bg-[#10b981]/10 text-[#10b981] px-2 py-0.5 rounded-full">公开</span>}
-                    </div>
+                      {config.isPublic && <span className="text-[10px] bg-[#10b981]/10 text-[#10b981] px-2 py-0.5 rounded-full flex-shrink-0">公开</span>}
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -383,10 +388,16 @@ export default function DashboardPage() {
                           更新于 {new Date(config.updatedAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
                         </div>
                       </div>
-                      <button onClick={() => deleteConfig(config.id)}
-                        className="text-xs text-[#6b6b8a] hover:text-[#f87171] transition-colors cursor-pointer px-2 py-1">
-                        删除
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Link href={`/dashboard/configs/${config.id}`}
+                          className="text-xs text-[#8b5cf6] hover:text-white transition-colors cursor-pointer px-2 py-1">
+                          查看
+                        </Link>
+                        <button onClick={() => deleteConfig(config.id)}
+                          className="text-xs text-[#6b6b8a] hover:text-[#f87171] transition-colors cursor-pointer px-2 py-1">
+                          删除
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
